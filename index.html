@@ -2,15 +2,14 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Doom Clone JS</title>
+    <title>Doom Clone: Physics Edition</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; }
         #crosshair {
             position: absolute;
             top: 50%; left: 50%;
-            width: 10px; height: 10px;
-            background-color: lime;
-            border-radius: 50%;
+            width: 12px; height: 12px;
+            border: 2px solid lime;
             transform: translate(-50%, -50%);
             pointer-events: none;
             z-index: 10;
@@ -22,7 +21,6 @@
             transform: translateX(-50%);
             width: 350px;
             height: 350px;
-            /* Картинка дробовика из оригинального Doom */
             background: url('https://raw.githubusercontent.com/pajadam/pajadam.github.io/master/doom-assets/shotgun.png') no-repeat;
             background-size: contain;
             pointer-events: none;
@@ -42,30 +40,34 @@
         import * as THREE from 'three';
 
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x050505);
-        scene.fog = new THREE.Fog(0x050505, 1, 15);
+        scene.background = new THREE.Color(0x020202);
+        scene.fog = new THREE.Fog(0x020202, 1, 18);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(2, 1.6, 2);
+        // Начальная позиция игрока (в свободном месте)
+        camera.position.set(1.5, 1.6, 1.5);
 
         const renderer = new THREE.WebGLRenderer({ antialias: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // --- ЗАГРУЗКА ТЕКСТУР ---
         const loader = new THREE.TextureLoader();
-        // Используем текстуру кирпича для стен
         const wallTexture = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
         const floorTexture = loader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
 
-        // --- КАРТА ---
+        // --- БОЛЬШАЯ КАРТА (1 - стена, 0 - пол) ---
         const map = [
-            [1,1,1,1,1,1,1,1],
-            [1,0,0,0,0,0,0,1],
-            [1,0,1,1,0,1,0,1],
-            [1,0,1,0,0,1,0,1],
-            [1,0,0,0,0,0,0,1],
-            [1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
+            [1,0,0,0,1,0,1,1,1,1,1,0,0,0,1],
+            [1,0,0,0,0,0,1,0,0,0,1,0,1,0,1],
+            [1,1,1,0,1,1,1,0,0,0,1,0,1,0,1],
+            [1,0,0,0,0,0,0,0,1,0,0,0,1,0,1],
+            [1,0,1,1,1,1,1,0,1,1,1,1,1,0,1],
+            [1,0,1,0,0,0,1,0,0,0,0,0,0,0,1],
+            [1,0,1,0,1,0,1,1,1,1,1,1,1,0,1],
+            [1,0,0,0,1,0,0,0,0,0,0,0,1,0,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
         ];
 
         const wallGeo = new THREE.BoxGeometry(1, 2.5, 1);
@@ -88,16 +90,10 @@
         floor.rotation.x = -Math.PI / 2;
         scene.add(floor);
 
-        // --- ИСПРАВЛЕННОЕ УПРАВЛЕНИЕ ---
+        // --- УПРАВЛЕНИЕ И ФИЗИКА ---
         const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false };
-        
-        window.addEventListener('keydown', (e) => {
-            if (e.code in keys) keys[e.code] = true;
-        });
-        window.addEventListener('keyup', (e) => {
-            if (e.code in keys) keys[e.code] = false;
-        });
-
+        window.addEventListener('keydown', (e) => { if (e.code in keys) keys[e.code] = true; });
+        window.addEventListener('keyup', (e) => { if (e.code in keys) keys[e.code] = false; });
         window.addEventListener('mousemove', (e) => {
             if (document.pointerLockElement === document.body) {
                 camera.rotation.y -= e.movementX * 0.003;
@@ -105,7 +101,16 @@
         });
         window.addEventListener('click', () => document.body.requestPointerLock());
 
-        // --- АНИМАЦИЯ ---
+        // Функция проверки: можно ли наступить в эти координаты?
+        function canMove(x, z) {
+            // Округляем координаты до индексов массива
+            const mapX = Math.round(x);
+            const mapZ = Math.round(z);
+            // Если вышли за пределы массива или там стена (1) - нельзя
+            if (map[mapZ] && map[mapZ][mapX] === 1) return false;
+            return true;
+        }
+
         let stepCount = 0;
         const weaponImg = document.getElementById('weapon');
 
@@ -119,11 +124,20 @@
             dir.normalize();
             const side = new THREE.Vector3().crossVectors(camera.up, dir).normalize();
 
+            // Сохраняем текущую позицию
+            const oldPos = camera.position.clone();
             let moving = false;
+
             if (keys.KeyW) { camera.position.addScaledVector(dir, speed); moving = true; }
             if (keys.KeyS) { camera.position.addScaledVector(dir, -speed); moving = true; }
             if (keys.KeyA) { camera.position.addScaledVector(side, speed); moving = true; }
             if (keys.KeyD) { camera.position.addScaledVector(side, -speed); moving = true; }
+
+            // ПРОВЕРКА СТОЛКНОВЕНИЯ
+            // Если после движения мы оказались в стене — возвращаем назад
+            if (!canMove(camera.position.x, camera.position.z)) {
+                camera.position.copy(oldPos);
+            }
 
             if (moving) {
                 stepCount += 0.2;
