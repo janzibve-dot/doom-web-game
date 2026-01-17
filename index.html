@@ -2,25 +2,23 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Doom Arena: Bloody Sky</title>
+    <title>Doom Arena: Cloud Sky & Grass</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #300; }
+        body { margin: 0; overflow: hidden; background-color: #500; }
         #crosshair {
             position: absolute;
             top: 50%; left: 50%;
             width: 12px; height: 12px;
-            border: 2px solid #f00; /* Прицел стал красным */
+            border: 2px solid lime;
             transform: translate(-50%, -50%);
             pointer-events: none;
             z-index: 10;
         }
         #weapon {
             position: absolute;
-            bottom: 0;
-            left: 50%;
+            bottom: 0; left: 50%;
             transform: translateX(-50%);
-            width: 350px;
-            height: 350px;
+            width: 350px; height: 350px;
             background: url('https://raw.githubusercontent.com/pajadam/pajadam.github.io/master/doom-assets/shotgun.png') no-repeat;
             background-size: contain;
             pointer-events: none;
@@ -40,32 +38,38 @@
         import * as THREE from 'three';
 
         const scene = new THREE.Scene();
-        // --- КРОВАВОЕ НЕБО И ТУМАН ---
-        const skyColor = 0x440000; // Очень темно-красный
-        scene.background = new THREE.Color(skyColor);
-        scene.fog = new THREE.Fog(skyColor, 1, 35);
+        
+        // Яркое кровавое небо (без тумана)
+        scene.background = new THREE.Color(0x880000); 
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(5, 1.6, 5);
 
-        const renderer = new THREE.WebGLRenderer({ antialias: false });
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
+        // Добавляем немного яркости всей картинке
+        renderer.toneMapping = THREE.ReinhardToneMapping;
         document.body.appendChild(renderer.domElement);
 
-        // --- ОСВЕЩЕНИЕ ---
-        // Общий слабый свет (чтобы мир был виден)
-        const ambientLight = new THREE.AmbientLight(0xff0000, 0.2); 
+        // --- ОБЛАКА И СВЕТ ---
+        // Основной свет сверху (как от солнца/луны сквозь тучи)
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        sunLight.position.set(10, 20, 10);
+        scene.add(sunLight);
+
+        // Общее освещение для яркости травы
+        const ambientLight = new THREE.AmbientLight(0xffaaaa, 0.6); 
         scene.add(ambientLight);
 
-        // Свет игрока (фонарик)
-        const playerLight = new THREE.PointLight(0xffffff, 50, 15);
-        scene.add(playerLight);
-
         const loader = new THREE.TextureLoader();
+        
+        // Текстура кирпича
         const wallTexture = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
-        const floorTexture = loader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
-        floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
-        floorTexture.repeat.set(20, 20);
+        
+        // Текстура ТРАВЫ
+        const grassTexture = loader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
+        grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
+        grassTexture.repeat.set(40, 40); // Сделали помельче и погуще
 
         const mapSize = 50;
         const map = [];
@@ -78,24 +82,23 @@
             map.push(row);
         }
 
-        // Используем MeshStandardMaterial вместо MeshBasicMaterial, чтобы объекты реагировали на свет
-        const wallGeo = new THREE.BoxGeometry(1, 4, 1);
-        const wallMat = new THREE.MeshStandardMaterial({ map: wallTexture, color: 0x664444 });
+        const wallGeo = new THREE.BoxGeometry(1, 5, 1);
+        const wallMat = new THREE.MeshStandardMaterial({ map: wallTexture });
 
         for(let z = 0; z < mapSize; z++) {
             for(let x = 0; x < mapSize; x++) {
                 if(map[z][x] === 1) {
                     const wall = new THREE.Mesh(wallGeo, wallMat);
-                    wall.position.set(x, 2, z);
+                    wall.position.set(x, 2.5, z);
                     scene.add(wall);
                 }
             }
         }
 
-        const floor = new THREE.Mesh(
-            new THREE.PlaneGeometry(mapSize * 2, mapSize * 2),
-            new THREE.MeshStandardMaterial({ map: floorTexture, color: 0x440000 })
-        );
+        // Пол с яркой травой
+        const floorGeo = new THREE.PlaneGeometry(mapSize * 2, mapSize * 2);
+        const floorMat = new THREE.MeshStandardMaterial({ map: grassTexture });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
         floor.rotation.x = -Math.PI / 2;
         floor.position.set(mapSize/2, 0, mapSize/2);
         scene.add(floor);
@@ -124,7 +127,7 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            const speed = 0.12;
+            const speed = 0.15;
             const dir = new THREE.Vector3();
             camera.getWorldDirection(dir);
             dir.y = 0;
@@ -143,11 +146,8 @@
                 camera.position.copy(oldPos);
             }
 
-            // Привязываем свет к камере
-            playerLight.position.copy(camera.position);
-
             if (moving) {
-                stepCount += 0.25;
+                stepCount += 0.3;
                 weaponImg.style.bottom = (Math.sin(stepCount) * 15) - 10 + 'px';
             } else {
                 weaponImg.style.bottom = '0px';
