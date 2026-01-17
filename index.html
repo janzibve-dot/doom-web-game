@@ -2,14 +2,14 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Doom Arena: Big Space</title>
+    <title>Doom Arena: Bloody Sky</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; }
+        body { margin: 0; overflow: hidden; background-color: #300; }
         #crosshair {
             position: absolute;
             top: 50%; left: 50%;
             width: 12px; height: 12px;
-            border: 2px solid lime;
+            border: 2px solid #f00; /* Прицел стал красным */
             transform: translate(-50%, -50%);
             pointer-events: none;
             z-index: 10;
@@ -40,45 +40,48 @@
         import * as THREE from 'three';
 
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x020202);
-        // Увеличили дальность тумана до 40, так как карта стала больше
-        scene.fog = new THREE.Fog(0x020202, 1, 40);
+        // --- КРОВАВОЕ НЕБО И ТУМАН ---
+        const skyColor = 0x440000; // Очень темно-красный
+        scene.background = new THREE.Color(skyColor);
+        scene.fog = new THREE.Fog(skyColor, 1, 35);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(5, 1.6, 5); // Спавнимся чуть дальше от угла
+        camera.position.set(5, 1.6, 5);
 
         const renderer = new THREE.WebGLRenderer({ antialias: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
+        // --- ОСВЕЩЕНИЕ ---
+        // Общий слабый свет (чтобы мир был виден)
+        const ambientLight = new THREE.AmbientLight(0xff0000, 0.2); 
+        scene.add(ambientLight);
+
+        // Свет игрока (фонарик)
+        const playerLight = new THREE.PointLight(0xffffff, 50, 15);
+        scene.add(playerLight);
+
         const loader = new THREE.TextureLoader();
         const wallTexture = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
-        // Повторяем текстуру пола, чтобы она не растягивалась
         const floorTexture = loader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
         floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
         floorTexture.repeat.set(20, 20);
 
-        // --- ГЕНЕРАЦИЯ БОЛЬШОЙ ПУСТОЙ КАРТЫ (50x50) ---
         const mapSize = 50;
         const map = [];
-
         for (let z = 0; z < mapSize; z++) {
             const row = [];
             for (let x = 0; x < mapSize; x++) {
-                // Ставим стену (1) только по краям, внутри всё пусто (0)
-                if (x === 0 || x === mapSize - 1 || z === 0 || z === mapSize - 1) {
-                    row.push(1);
-                } else {
-                    row.push(0);
-                }
+                if (x === 0 || x === mapSize - 1 || z === 0 || z === mapSize - 1) row.push(1);
+                else row.push(0);
             }
             map.push(row);
         }
 
-        const wallGeo = new THREE.BoxGeometry(1, 4, 1); // Стены сделали повыше (4 метра)
-        const wallMat = new THREE.MeshBasicMaterial({ map: wallTexture });
+        // Используем MeshStandardMaterial вместо MeshBasicMaterial, чтобы объекты реагировали на свет
+        const wallGeo = new THREE.BoxGeometry(1, 4, 1);
+        const wallMat = new THREE.MeshStandardMaterial({ map: wallTexture, color: 0x664444 });
 
-        // Добавляем стены на сцену
         for(let z = 0; z < mapSize; z++) {
             for(let x = 0; x < mapSize; x++) {
                 if(map[z][x] === 1) {
@@ -89,16 +92,15 @@
             }
         }
 
-        // Большой пол
         const floor = new THREE.Mesh(
             new THREE.PlaneGeometry(mapSize * 2, mapSize * 2),
-            new THREE.MeshBasicMaterial({ map: floorTexture })
+            new THREE.MeshStandardMaterial({ map: floorTexture, color: 0x440000 })
         );
         floor.rotation.x = -Math.PI / 2;
         floor.position.set(mapSize/2, 0, mapSize/2);
         scene.add(floor);
 
-        // --- УПРАВЛЕНИЕ И ФИЗИКА ---
+        // --- УПРАВЛЕНИЕ ---
         const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false };
         window.addEventListener('keydown', (e) => { if (e.code in keys) keys[e.code] = true; });
         window.addEventListener('keyup', (e) => { if (e.code in keys) keys[e.code] = false; });
@@ -122,7 +124,7 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            const speed = 0.12; // Немного увеличил скорость, так как арена большая
+            const speed = 0.12;
             const dir = new THREE.Vector3();
             camera.getWorldDirection(dir);
             dir.y = 0;
@@ -140,6 +142,9 @@
             if (!canMove(camera.position.x, camera.position.z)) {
                 camera.position.copy(oldPos);
             }
+
+            // Привязываем свет к камере
+            playerLight.position.copy(camera.position);
 
             if (moving) {
                 stepCount += 0.25;
