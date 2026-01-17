@@ -1,0 +1,20 @@
+body { margin: 0; overflow: hidden; background-color: #000; }
+#crosshair {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 12px; height: 12px;
+    border: 2px solid lime;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 10;
+}
+#weapon {
+    position: absolute;
+    bottom: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 350px; height: 350px;
+    background: url('https://raw.githubusercontent.com/pajadam/pajadam.github.io/master/doom-assets/shotgun.png') no-repeat;
+    background-size: contain;
+    pointer-events: none;
+    z-index: 5;
+}
