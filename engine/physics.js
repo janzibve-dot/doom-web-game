@@ -1,15 +1,23 @@
-// Модуль физики и коллизий
 export class Physics {
-    constructor(mapSize) {
-        this.mapSize = mapSize;
+    constructor(mapData) {
+        this.map = mapData.map;
     }
 
-    // Проверяем, не выходит ли игрок за границы арены
     canMove(x, z) {
-        // Мы знаем, что стены стоят по периметру (0 и mapSize-1)
-        const margin = 0.8; // Дистанция до стены, чтобы не входить в неё вплотную
-        if (x < margin || x > this.mapSize - 1 - margin) return false;
-        if (z < margin || z > this.mapSize - 1 - margin) return false;
+        // Переводим мировые координаты в индексы массива (сетку)
+        const gridX = Math.round(x);
+        const gridZ = Math.round(z);
+
+        // Проверяем, не вышли ли за пределы массива
+        if (this.map[gridZ] === undefined || this.map[gridZ][gridX] === undefined) {
+            return false;
+        }
+
+        // Если в этой клетке 1 — это стена
+        if (this.map[gridZ][gridX] === 1) {
+            return false;
+        }
+
         return true;
     }
 }
