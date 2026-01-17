@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Doom Clone: Physics Edition</title>
+    <title>Doom Arena: Big Space</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; }
         #crosshair {
@@ -41,11 +41,11 @@
 
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x020202);
-        scene.fog = new THREE.Fog(0x020202, 1, 18);
+        // Увеличили дальность тумана до 40, так как карта стала больше
+        scene.fog = new THREE.Fog(0x020202, 1, 40);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        // Начальная позиция игрока (в свободном месте)
-        camera.position.set(1.5, 1.6, 1.5);
+        camera.position.set(5, 1.6, 5); // Спавнимся чуть дальше от угла
 
         const renderer = new THREE.WebGLRenderer({ antialias: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -53,41 +53,49 @@
 
         const loader = new THREE.TextureLoader();
         const wallTexture = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
+        // Повторяем текстуру пола, чтобы она не растягивалась
         const floorTexture = loader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
+        floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
+        floorTexture.repeat.set(20, 20);
 
-        // --- БОЛЬШАЯ КАРТА (1 - стена, 0 - пол) ---
-        const map = [
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-            [1,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
-            [1,0,0,0,1,0,1,1,1,1,1,0,0,0,1],
-            [1,0,0,0,0,0,1,0,0,0,1,0,1,0,1],
-            [1,1,1,0,1,1,1,0,0,0,1,0,1,0,1],
-            [1,0,0,0,0,0,0,0,1,0,0,0,1,0,1],
-            [1,0,1,1,1,1,1,0,1,1,1,1,1,0,1],
-            [1,0,1,0,0,0,1,0,0,0,0,0,0,0,1],
-            [1,0,1,0,1,0,1,1,1,1,1,1,1,0,1],
-            [1,0,0,0,1,0,0,0,0,0,0,0,1,0,1],
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-        ];
+        // --- ГЕНЕРАЦИЯ БОЛЬШОЙ ПУСТОЙ КАРТЫ (50x50) ---
+        const mapSize = 50;
+        const map = [];
 
-        const wallGeo = new THREE.BoxGeometry(1, 2.5, 1);
+        for (let z = 0; z < mapSize; z++) {
+            const row = [];
+            for (let x = 0; x < mapSize; x++) {
+                // Ставим стену (1) только по краям, внутри всё пусто (0)
+                if (x === 0 || x === mapSize - 1 || z === 0 || z === mapSize - 1) {
+                    row.push(1);
+                } else {
+                    row.push(0);
+                }
+            }
+            map.push(row);
+        }
+
+        const wallGeo = new THREE.BoxGeometry(1, 4, 1); // Стены сделали повыше (4 метра)
         const wallMat = new THREE.MeshBasicMaterial({ map: wallTexture });
 
-        for(let z = 0; z < map.length; z++) {
-            for(let x = 0; x < map[z].length; x++) {
+        // Добавляем стены на сцену
+        for(let z = 0; z < mapSize; z++) {
+            for(let x = 0; x < mapSize; x++) {
                 if(map[z][x] === 1) {
                     const wall = new THREE.Mesh(wallGeo, wallMat);
-                    wall.position.set(x, 1.25, z);
+                    wall.position.set(x, 2, z);
                     scene.add(wall);
                 }
             }
         }
 
+        // Большой пол
         const floor = new THREE.Mesh(
-            new THREE.PlaneGeometry(50, 50),
+            new THREE.PlaneGeometry(mapSize * 2, mapSize * 2),
             new THREE.MeshBasicMaterial({ map: floorTexture })
         );
         floor.rotation.x = -Math.PI / 2;
+        floor.position.set(mapSize/2, 0, mapSize/2);
         scene.add(floor);
 
         // --- УПРАВЛЕНИЕ И ФИЗИКА ---
@@ -101,12 +109,9 @@
         });
         window.addEventListener('click', () => document.body.requestPointerLock());
 
-        // Функция проверки: можно ли наступить в эти координаты?
         function canMove(x, z) {
-            // Округляем координаты до индексов массива
             const mapX = Math.round(x);
             const mapZ = Math.round(z);
-            // Если вышли за пределы массива или там стена (1) - нельзя
             if (map[mapZ] && map[mapZ][mapX] === 1) return false;
             return true;
         }
@@ -117,14 +122,13 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            const speed = 0.08;
+            const speed = 0.12; // Немного увеличил скорость, так как арена большая
             const dir = new THREE.Vector3();
             camera.getWorldDirection(dir);
             dir.y = 0;
             dir.normalize();
             const side = new THREE.Vector3().crossVectors(camera.up, dir).normalize();
 
-            // Сохраняем текущую позицию
             const oldPos = camera.position.clone();
             let moving = false;
 
@@ -133,14 +137,12 @@
             if (keys.KeyA) { camera.position.addScaledVector(side, speed); moving = true; }
             if (keys.KeyD) { camera.position.addScaledVector(side, -speed); moving = true; }
 
-            // ПРОВЕРКА СТОЛКНОВЕНИЯ
-            // Если после движения мы оказались в стене — возвращаем назад
             if (!canMove(camera.position.x, camera.position.z)) {
                 camera.position.copy(oldPos);
             }
 
             if (moving) {
-                stepCount += 0.2;
+                stepCount += 0.25;
                 weaponImg.style.bottom = (Math.sin(stepCount) * 15) - 10 + 'px';
             } else {
                 weaponImg.style.bottom = '0px';
