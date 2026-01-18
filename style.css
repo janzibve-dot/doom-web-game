@@ -3,7 +3,7 @@ body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courie
 #start-screen, #death-screen {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: radial-gradient(circle, #1a0000 0%, #000 100%);
-    display: flex; justify-content: center; align-items: center; z-index: 1000;
+    display: flex; justify-content: center; align-items: center; z-index: 2000;
 }
 
 .neon-border {
@@ -12,17 +12,17 @@ body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courie
     animation: pulse 2s infinite, flicker 0.15s infinite;
 }
 
-.horror-title { color: #f00; font-size: 50px; letter-spacing: 5px; margin: 0 0 30px 0; text-shadow: 0 0 10px #f00; }
+.horror-title { color: #f00; font-size: 50px; letter-spacing: 5px; margin: 0 0 30px 0; }
 
 #play-btn, #death-screen button {
     background: transparent; border: 2px solid #f00; color: #f00;
-    padding: 15px 40px; font-size: 20px; cursor: pointer;
+    padding: 15px 40px; font-size: 20px; cursor: pointer; pointer-events: auto;
 }
 
 #crosshair {
     position: absolute; top: 50%; left: 50%; width: 10px; height: 10px;
-    border: 2px solid #0f0; border-radius: 50%;
-    transform: translate(-50%, -50%); pointer-events: none; z-index: 500;
+    border: 2px solid #0f0; border-radius: 50%; transform: translate(-50%, -50%);
+    pointer-events: none; z-index: 500;
 }
 
 #weapon-container {
@@ -33,9 +33,8 @@ body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courie
 
 #weapon {
     width: 500px; height: 450px;
-    background-image: url('assets/sprites/pistol.png');
-    background-size: contain; background-repeat: no-repeat; background-position: bottom center;
-    transform-origin: bottom center;
+    background: url('assets/sprites/pistol.png') no-repeat bottom center;
+    background-size: contain; transform-origin: bottom center;
 }
 
 .reloading { transform: translateY(100%) rotate(15deg) !important; transition: transform 0.6s ease-in-out !important; }
@@ -46,5 +45,5 @@ body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courie
 #kill-counter { position: absolute; top: 20px; right: 20px; color: #f00; font-size: 24px; z-index: 100; }
 #damage-flash { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,0,0,0.3); display: none; z-index: 150; }
 
-@keyframes pulse { 0% { box-shadow: 0 0 20px #600; } 50% { box-shadow: 0 0 50px #f00; } 100% { box-shadow: 0 0 20px #600; } }
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 20px #600; } 50% { box-shadow: 0 0 50px #f00; } }
 @keyframes flicker { 0%, 100% { opacity: 1; } 93% { opacity: 0.7; } 95% { opacity: 0.4; } }
