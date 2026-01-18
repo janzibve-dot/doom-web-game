@@ -6,10 +6,6 @@ let levelData;
 let health = 100, ammo = 100;
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false };
 
-// Координаты прицела на экране (в пикселях)
-let crosshairX = window.innerWidth / 2;
-let crosshairY = window.innerHeight / 2;
-
 let isShooting = false;
 let shotSound;
 const audioLoader = new THREE.AudioLoader();
@@ -29,6 +25,7 @@ function init() {
     const listener = new THREE.AudioListener();
     camera.add(listener);
     shotSound = new THREE.Audio(listener);
+    
     audioLoader.load('audio/sfx/shot.mp3', (buffer) => {
         shotSound.setBuffer(buffer);
         shotSound.setVolume(0.4);
@@ -66,51 +63,24 @@ function init() {
     window.addEventListener('keydown', e => { if(e.code in keys) keys[e.code] = true; });
     window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
     
-    // Блокировка курсора для захвата движений мыши
-    window.addEventListener('mousedown', () => {
-        if (!document.pointerLockElement) {
-            document.body.requestPointerLock();
+    window.addEventListener('mousedown', (e) => {
+        if (document.pointerLockElement) {
+            if (e.button === 0) shoot();
         } else {
-            shoot();
+            document.body.requestPointerLock();
         }
     });
 
+    // КЛАССИЧЕСКОЕ УПРАВЛЕНИЕ КАМЕРОЙ
     window.addEventListener('mousemove', e => {
         if (document.pointerLockElement) {
-            // Двигаем прицел
-            crosshairX += e.movementX;
-            crosshairY += e.movementY;
-
-            // Ограничиваем прицел краями экрана
-            crosshairX = Math.max(0, Math.min(window.innerWidth, crosshairX));
-            crosshairY = Math.max(0, Math.min(window.innerHeight, crosshairY));
-
-            // Поворачиваем камеру, если прицел у края
-            const edgeThreshold = 100; // зона активации поворота у края
-            if (crosshairX > window.innerWidth - edgeThreshold) camera.rotation.y -= 0.02;
-            if (crosshairX < edgeThreshold) camera.rotation.y += 0.02;
-
-            updateCrosshairPosition();
+            camera.rotation.y -= e.movementX * 0.002;
+            // Можно добавить ограничение по вертикали, если нужно
+            // camera.rotation.x -= e.movementY * 0.002; 
         }
     });
 
     animate();
-}
-
-function updateCrosshairPosition() {
-    const ch = document.getElementById('crosshair');
-    const wp = document.getElementById('weapon');
-
-    // Обновляем позицию прицела на экране
-    ch.style.left = crosshairX + 'px';
-    ch.style.top = crosshairY + 'px';
-
-    // Наклоняем пистолет в сторону прицела (параллакс)
-    const offsetX = (crosshairX - window.innerWidth / 2) / 10;
-    const offsetY = (window.innerHeight / 2 - crosshairY) / 15;
-    if (!isShooting) {
-        wp.style.transform = `translateX(${offsetX}px) translateY(${offsetY}px)`;
-    }
 }
 
 function shoot() {
@@ -125,15 +95,28 @@ function shoot() {
     }
 
     const weapon = document.getElementById('weapon');
+    const crosshair = document.getElementById('crosshair');
+    
     playerLight.intensity = 15;
 
-    // Анимация выстрела с сохранением текущего смещения прицела
-    const currentTransform = weapon.style.transform;
-    weapon.style.transform = `${currentTransform} scale(1.1) rotate(-5deg)`;
+    // Анимация оружия (отдача)
+    weapon.style.transition = "none";
+    weapon.style.transform = "translateY(60px) scale(1.1) rotate(-5deg)";
+
+    // Визуальный отклик прицела
+    crosshair.style.width = "12px";
+    crosshair.style.height = "12px";
+    crosshair.style.borderColor = "white";
 
     setTimeout(() => {
         playerLight.intensity = 1.2;
-        updateCrosshairPosition(); // Возвращаем к позиции прицела
+        weapon.style.transition = "transform 0.1s ease-out";
+        weapon.style.transform = "translateY(0) scale(1) rotate(0deg)";
+        
+        crosshair.style.width = "6px";
+        crosshair.style.height = "6px";
+        crosshair.style.borderColor = "#0f0";
+        
         isShooting = false;
     }, 80);
 }
@@ -152,7 +135,9 @@ function animate() {
     if (keys.KeyA) camera.position.addScaledVector(side, speed);
     if (keys.KeyD) camera.position.addScaledVector(side, -speed);
 
-    if (physics.checkCollision(camera.position.x, camera.position.z)) camera.position.copy(oldP);
+    if (physics.checkCollision(camera.position.x, camera.position.z)) {
+        camera.position.copy(oldP);
+    }
 
     playerLight.position.copy(camera.position);
     renderer.render(scene, camera);
