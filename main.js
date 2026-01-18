@@ -12,7 +12,7 @@ let pitch = 0, isGameStarted = false, isDead = false, gameStartTime = 0;
 let shotSound, reloadSound, bgMusicHTML, heartbeatSound, flickerSound;
 const audioLoader = new THREE.AudioLoader();
 const listener = new THREE.AudioListener();
-const path = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+const path = window.location.pathname.substring(0, window.location.lastIndexOf('/') + 1);
 
 fetch(path + 'levels/level1.json').then(r => r.json()).then(data => { 
     levelData = data; 
@@ -23,7 +23,7 @@ fetch(path + 'levels/level1.json').then(r => r.json()).then(data => {
 function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000); 
-    scene.fog = new THREE.Fog(0x000000, 1, 10); 
+    scene.fog = new THREE.Fog(0x000000, 1, 9); 
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
     camera.position.set(2, 1.6, 2);
@@ -36,7 +36,7 @@ function init() {
 
     loadAllSounds();
 
-    playerLight = new THREE.SpotLight(0xffffff, 5, 20, Math.PI/4, 0.5);
+    playerLight = new THREE.SpotLight(0xffffff, 5, 18, Math.PI/4, 0.5);
     scene.add(playerLight);
     scene.add(playerLight.target);
 
@@ -44,8 +44,9 @@ function init() {
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
     wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping;
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
+    const ceilMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
 
-    // Отрисовка стен
+    // Отрисовка лабиринта (стены + блочный потолок для исправления багов)
     levelData.map.forEach((row, z) => {
         row.forEach((cell, x) => {
             if (cell === 1) {
@@ -53,23 +54,17 @@ function init() {
                 wall.position.set(x, 2, z);
                 scene.add(wall);
             }
+            // Потолок блоками над каждым сектором для стабильности
+            const ceilPart = new THREE.Mesh(new THREE.BoxGeometry(1, 0.1, 1), ceilMat);
+            ceilPart.position.set(x, 4, z);
+            scene.add(ceilPart);
         });
     });
 
-    // ИСПРАВЛЕНИЕ ПОТОЛКА И ПОЛА
-    const mapSizeZ = levelData.map.length;
-    const mapSizeX = levelData.map[0].length;
-    
     const floorMat = new THREE.MeshStandardMaterial({ color: 0x050505 });
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(mapSizeX * 2, mapSizeZ * 2), floorMat);
-    floor.position.set(mapSizeX/2, 0, mapSizeZ/2);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), floorMat);
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
-
-    const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(mapSizeX * 2, mapSizeZ * 2), floorMat);
-    ceiling.position.set(mapSizeX/2, 4, mapSizeZ/2); // Потолок на высоте 4
-    ceiling.rotation.x = Math.PI / 2;
-    scene.add(ceiling);
 
     document.getElementById('play-btn').onclick = () => startGame();
 
@@ -115,11 +110,20 @@ function spawnRandomMonster() {
         scene.add(model);
         if (gltf.animations.length > 0) {
             const mixer = new THREE.AnimationMixer(model);
-            const action = mixer.clipAction(gltf.animations[0]);
-            action.time = 3; action.play();
+            const clip = gltf.animations[0];
+            const action = mixer.clipAction(clip);
+            
+            // ЖЕСТКАЯ ОБРЕЗКА: -3с с начала, -3с с конца
+            const startTrim = 3;
+            const endTrim = Math.max(startTrim + 0.1, clip.duration - 3);
+            action.time = startTrim;
+            action.play();
+            
+            model.userData.animData = { action, startTrim, endTrim };
             mixers.push(mixer);
         }
-        model.userData = { health: 100, speed: 0.045 };
+        model.userData.health = 100;
+        model.userData.speed = 0.045;
         monsters.push(model);
     });
 }
@@ -129,7 +133,15 @@ function animate() {
     if (!isGameStarted || isDead) return;
 
     const delta = clock.getDelta();
-    mixers.forEach(m => m.update(delta));
+    mixers.forEach((m, idx) => {
+        m.update(delta);
+        // Ручной контроль цикла анимации для обрезки
+        const monster = monsters.find(mon => mon.userData.animData && mixers[idx] === m);
+        if (monster) {
+            const d = monster.userData.animData;
+            if (d.action.time >= d.endTrim) d.action.time = d.startTrim;
+        }
+    });
 
     const oldP = camera.position.clone();
     let s = keys.ShiftLeft ? 0.15 : 0.07;
@@ -144,7 +156,7 @@ function animate() {
 
     let collision = false;
     if (physics && physics.checkCollision(camera.position.x, camera.position.z)) collision = true;
-    monsters.forEach(m => { if(camera.position.distanceTo(m.position) < 1.0) collision = true; });
+    monsters.forEach(m => { if(camera.position.distanceTo(m.position) < 0.9) collision = true; });
     if (collision) camera.position.copy(oldP);
 
     playerLight.position.copy(camera.position);
@@ -197,7 +209,7 @@ function shoot() {
 
     const weapon = document.getElementById('weapon');
     weapon.style.transition = 'none';
-    weapon.style.transform = `translateY(${pitch * 20 - 40}px) scale(1.1)`;
+    weapon.style.transform = `translateY(${pitch * 20 - 45}px) scale(1.1)`;
 
     setTimeout(() => {
         weapon.style.transition = 'transform 0.1s ease-out';
