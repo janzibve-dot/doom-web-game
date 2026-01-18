@@ -26,22 +26,19 @@ window.addEventListener('DOMContentLoaded', () => {
 function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000); 
-    scene.fog = new THREE.Fog(0x000000, 0.1, 10); 
+    scene.fog = new THREE.Fog(0x000000, 0.1, 12); 
 
-    // ПРАВКА: Сужение диапазона Near/Far для стабильности глубины
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 300);
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500);
     camera.position.set(2, 1.6, 2);
     camera.rotation.order = 'YXZ'; 
     camera.add(listener);
 
-    // ПРАВКА: logarithmicDepthBuffer решает проблему мерцания полос (Z-fighting)
     renderer = new THREE.WebGLRenderer({ 
         antialias: true, 
-        logarithmicDepthBuffer: true,
+        logarithmicDepthBuffer: true, // Решает проблему мерцания текстур
         precision: "highp" 
     });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     document.body.appendChild(renderer.domElement);
 
     loadAllSounds();
@@ -50,54 +47,28 @@ function init() {
     scene.add(playerLight);
     scene.add(playerLight.target);
 
-    // ОПТИМИЗАЦИЯ: Объединение геометрии уровня
-    const wallGeometries = [];
-    const floorGeometries = [];
-    const ceilGeometries = [];
-
+    // ОПТИМИЗАЦИЯ МИРА: Объединение всей геометрии в 3 объекта
+    const wallGeometries = [], floorGeometries = [], ceilGeometries = [];
     const wallBox = new THREE.BoxGeometry(1, 4, 1);
-    const floorBox = new THREE.BoxGeometry(1, 0.1, 1);
+    const tileBox = new THREE.BoxGeometry(1, 0.1, 1);
 
     levelData.map.forEach((row, z) => {
         row.forEach((cell, x) => {
             if (cell === 1) {
-                const g = wallBox.clone();
-                g.translate(x, 2, z);
-                wallGeometries.push(g);
+                const g = wallBox.clone(); g.translate(x, 2, z); wallGeometries.push(g);
             } else {
-                const f = floorBox.clone();
-                f.translate(x, 0, z);
-                floorGeometries.push(f);
-
-                const c = floorBox.clone();
-                c.translate(x, 4, z);
-                ceilGeometries.push(c);
+                const f = tileBox.clone(); f.translate(x, 0, z); floorGeometries.push(f);
+                const c = tileBox.clone(); c.translate(x, 4, z); ceilGeometries.push(c);
             }
         });
     });
 
-    // Создаем единые меши для всего лабиринта
-    const loader = new THREE.TextureLoader();
-    const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
+    const wallTex = new THREE.TextureLoader().load('https://threejs.org/examples/textures/brick_diffuse.jpg');
     wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping;
-    
-    const wallMesh = new THREE.Mesh(
-        BufferGeometryUtils.mergeGeometries(wallGeometries),
-        new THREE.MeshStandardMaterial({ map: wallTex })
-    );
-    scene.add(wallMesh);
 
-    const floorMesh = new THREE.Mesh(
-        BufferGeometryUtils.mergeGeometries(floorGeometries),
-        new THREE.MeshStandardMaterial({ color: 0x050505 })
-    );
-    scene.add(floorMesh);
-
-    const ceilMesh = new THREE.Mesh(
-        BufferGeometryUtils.mergeGeometries(ceilGeometries),
-        new THREE.MeshStandardMaterial({ color: 0x080808 })
-    );
-    scene.add(ceilMesh);
+    scene.add(new THREE.Mesh(BufferGeometryUtils.mergeGeometries(wallGeometries), new THREE.MeshStandardMaterial({ map: wallTex })));
+    scene.add(new THREE.Mesh(BufferGeometryUtils.mergeGeometries(floorGeometries), new THREE.MeshStandardMaterial({ color: 0x050505 })));
+    scene.add(new THREE.Mesh(BufferGeometryUtils.mergeGeometries(ceilGeometries), new THREE.MeshStandardMaterial({ color: 0x080808 })));
 
     document.getElementById('play-btn').onclick = () => { if(!isGameStarted) startGame(); };
 
@@ -105,8 +76,8 @@ function init() {
     window.onkeyup = (e) => { if(isGameStarted && !isDead && e.code in keys) keys[e.code] = false; };
     window.onmousemove = (e) => {
         if (isGameStarted && document.pointerLockElement && !isDead) {
-            camera.rotation.y -= e.movementX * 0.0022;
-            pitch -= e.movementY * 0.0022;
+            camera.rotation.y -= e.movementX * 0.002;
+            pitch -= e.movementY * 0.002;
             pitch = Math.max(-1.3, Math.min(1.3, pitch));
             camera.rotation.x = pitch;
             document.getElementById('weapon').style.transform = `translateY(${pitch * 25}px)`;
@@ -119,8 +90,7 @@ function init() {
 }
 
 function startGame() {
-    isGameStarted = true;
-    gameStartTime = Date.now();
+    isGameStarted = true; gameStartTime = Date.now();
     document.getElementById('start-screen').style.display = 'none';
     document.body.requestPointerLock();
     if (listener.context.state === 'suspended') listener.context.resume();
@@ -135,26 +105,21 @@ function spawnRandomMonster() {
         rz = Math.floor(Math.random() * (levelData.map.length - 2)) + 1;
     } while (levelData.map[rz] && levelData.map[rz][rx] === 1);
     
-    const gltfLoader = new GLTFLoader();
-    gltfLoader.load(path + 'assets/sprites/models/monster.glb', (gltf) => {
+    new GLTFLoader().load(path + 'assets/sprites/models/monster.glb', (gltf) => {
         const model = gltf.scene;
         model.position.set(rx, 0, rz);
-        model.scale.set(1.8, 1.8, 1.8);
+        
+        // ОПТИМИЗАЦИЯ РАЗМЕРА: 1.3 (чуть ниже игрока, чтобы не пересекаться с потолком)
+        model.scale.set(1.3, 1.3, 1.3);
+        
         scene.add(model);
         if (gltf.animations.length > 0) {
             const mixer = new THREE.AnimationMixer(model);
             const action = mixer.clipAction(gltf.animations[0]);
-            const duration = gltf.animations[0].duration;
-            const startTrim = 3;
-            const endTrim = Math.max(startTrim + 0.1, duration - 3);
-            
-            action.time = startTrim;
-            action.play();
-            model.userData.anim = { action, startTrim, endTrim };
-            mixers.push(mixer);
+            action.time = 3; action.play();
+            mixers.push({ mixer, model });
         }
-        model.userData.health = 100;
-        model.userData.speed = 0.046;
+        model.userData = { health: 100, speed: 0.046 };
         monsters.push(model);
     });
 }
@@ -164,13 +129,11 @@ function animate() {
     if (!isGameStarted || isDead) return;
 
     const delta = clock.getDelta();
-    mixers.forEach((m) => {
-        m.update(delta);
-        // Обрезка анимации в реальном времени
-        const action = m._actions[0];
-        if (action && action.time >= action._clip.duration - 3) {
-            action.time = 3;
-        }
+    // ПРАВКА АНИМАЦИИ: Жесткий сброс цикла
+    mixers.forEach((mObj) => {
+        mObj.mixer.update(delta);
+        const action = mObj.mixer._actions[0];
+        if (action && action.time >= action._clip.duration - 3) action.time = 3;
     });
 
     const oldP = camera.position.clone();
@@ -184,10 +147,8 @@ function animate() {
     if (keys.KeyA) camera.position.addScaledVector(sideDir, s);
     if (keys.KeyD) camera.position.addScaledVector(sideDir, -s);
 
-    let collision = false;
-    if (physics && physics.checkCollision(camera.position.x, camera.position.z)) collision = true;
-    monsters.forEach(m => { if(camera.position.distanceTo(m.position) < 1.25) collision = true; });
-    if (collision) camera.position.copy(oldP);
+    if (physics && physics.checkCollision(camera.position.x, camera.position.z)) camera.position.copy(oldP);
+    monsters.forEach(m => { if(camera.position.distanceTo(m.position) < 0.8) camera.position.copy(oldP); });
 
     playerLight.position.copy(camera.position);
     const targetPos = new THREE.Vector3(); camera.getWorldDirection(targetPos);
@@ -196,16 +157,17 @@ function animate() {
     let minMonsterDist = 20;
     const now = Date.now();
 
-    monsters.forEach((m, idx) => {
+    monsters.forEach((m) => {
         const dist = m.position.distanceTo(camera.position);
         if (dist < minMonsterDist) minMonsterDist = dist;
-        if (dist < 13) { 
+        if (dist < 12) { 
             const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
-            if (physics && !physics.checkCollision(m.position.x + dirM.x*0.4, m.position.z + dirM.z*0.4)) {
+            // Проверка, чтобы монстр не заходил в стену
+            if (physics && !physics.checkCollision(m.position.x + dirM.x * 0.4, m.position.z + dirM.z * 0.4)) {
                 m.position.x += dirM.x * m.userData.speed; m.position.z += dirM.z * m.userData.speed;
             }
             m.lookAt(camera.position.x, 0, camera.position.z);
-            if (dist < 1.45 && now - lastDamageTime > 1200) {
+            if (dist < 1.4 && now - lastDamageTime > 1200) {
                 playerHP -= 20;
                 document.getElementById('hp-bar-fill').style.width = playerHP + "%";
                 document.getElementById('hp-text').innerText = playerHP + "%";
@@ -258,7 +220,7 @@ function shoot() {
             obj.userData.health -= 35;
             if (obj.userData.health <= 0) {
                 scene.remove(obj);
-                // ПРАВКА: Полная очистка памяти при убийстве
+                mixers = mixers.filter(m => m.model !== obj);
                 monsters = monsters.filter(m => m !== obj);
                 kills++; document.getElementById('kill-counter').innerText = "УБИТО: " + kills;
             }
