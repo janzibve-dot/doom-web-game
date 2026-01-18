@@ -12,12 +12,17 @@ let pitch = 0, isGameStarted = false, isDead = false, gameStartTime = 0;
 let shotSound, reloadSound, bgMusicHTML, heartbeatSound, flickerSound;
 const audioLoader = new THREE.AudioLoader();
 const listener = new THREE.AudioListener();
-const path = window.location.pathname.substring(0, window.location.lastIndexOf('/') + 1);
+const path = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
 
-fetch(path + 'levels/level1.json').then(r => r.json()).then(data => { 
-    levelData = data; 
-    physics = new Physics(levelData);
-    init(); 
+// Ждем полной загрузки DOM, прежде чем искать кнопку
+window.addEventListener('DOMContentLoaded', () => {
+    fetch(path + 'levels/level1.json')
+        .then(r => r.json())
+        .then(data => { 
+            levelData = data; 
+            physics = new Physics(levelData);
+            init(); 
+        });
 });
 
 function init() {
@@ -46,7 +51,6 @@ function init() {
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
     const ceilMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
 
-    // Отрисовка лабиринта (стены + блочный потолок для исправления багов)
     levelData.map.forEach((row, z) => {
         row.forEach((cell, x) => {
             if (cell === 1) {
@@ -54,20 +58,25 @@ function init() {
                 wall.position.set(x, 2, z);
                 scene.add(wall);
             }
-            // Потолок блоками над каждым сектором для стабильности
             const ceilPart = new THREE.Mesh(new THREE.BoxGeometry(1, 0.1, 1), ceilMat);
             ceilPart.position.set(x, 4, z);
             scene.add(ceilPart);
         });
     });
 
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x050505 });
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), floorMat);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0x050505 }));
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
-    document.getElementById('play-btn').onclick = () => startGame();
+    // ПРИВЯЗКА КНОПКИ
+    const startBtn = document.getElementById('play-btn');
+    if(startBtn) {
+        startBtn.onclick = () => {
+            if(!isGameStarted) startGame();
+        };
+    }
 
+    // УПРАВЛЕНИЕ
     window.onkeydown = (e) => { if(isGameStarted && !isDead && e.code in keys) keys[e.code] = true; };
     window.onkeyup = (e) => { if(isGameStarted && !isDead && e.code in keys) keys[e.code] = false; };
     window.onmousemove = (e) => {
@@ -91,7 +100,9 @@ function startGame() {
     document.getElementById('start-screen').style.display = 'none';
     document.body.requestPointerLock();
     if (listener.context.state === 'suspended') listener.context.resume();
-    if (bgMusicHTML) bgMusicHTML.play();
+    if (bgMusicHTML) bgMusicHTML.play().catch(() => {});
+    
+    // Интервал спавна 15 монстров
     setInterval(() => { if (monsters.length < 15 && !isDead) spawnRandomMonster(); }, 5000);
 }
 
@@ -110,15 +121,10 @@ function spawnRandomMonster() {
         scene.add(model);
         if (gltf.animations.length > 0) {
             const mixer = new THREE.AnimationMixer(model);
-            const clip = gltf.animations[0];
-            const action = mixer.clipAction(clip);
-            
-            // ЖЕСТКАЯ ОБРЕЗКА: -3с с начала, -3с с конца
-            const startTrim = 3;
-            const endTrim = Math.max(startTrim + 0.1, clip.duration - 3);
+            const action = mixer.clipAction(gltf.animations[0]);
+            const startTrim = 3, endTrim = Math.max(3.1, gltf.animations[0].duration - 3);
             action.time = startTrim;
             action.play();
-            
             model.userData.animData = { action, startTrim, endTrim };
             mixers.push(mixer);
         }
@@ -135,8 +141,7 @@ function animate() {
     const delta = clock.getDelta();
     mixers.forEach((m, idx) => {
         m.update(delta);
-        // Ручной контроль цикла анимации для обрезки
-        const monster = monsters.find(mon => mon.userData.animData && mixers[idx] === m);
+        const monster = monsters.find(mon => mon.userData.animData && mixers.includes(m));
         if (monster) {
             const d = monster.userData.animData;
             if (d.action.time >= d.endTrim) d.action.time = d.startTrim;
