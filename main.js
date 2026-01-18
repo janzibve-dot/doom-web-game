@@ -6,7 +6,6 @@ let monsters = [], items = [], levelData;
 let health = 100, ammo = 50;
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false };
 
-// Переменные для оружия и анимации
 let currentWeapon = 'shotgun'; 
 let isShooting = false;
 let bobbingCounter = 0;
@@ -17,15 +16,15 @@ fetch('./levels/level1.json')
         levelData = data;
         init();
     })
-    .catch(err => alert("Ошибка загрузки карты: " + err.message));
+    .catch(err => alert("Ошибка карты: " + err.message));
 
 function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x020000);
-    scene.fog = new THREE.Fog(0x020000, 1, 18);
+    scene.fog = new THREE.Fog(0x020000, 1, 28); 
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 1000);
-    camera.position.set(2, 1.6, 2); 
+    camera.position.set(4, 1.6, 4); // Чуть дальше от угла для спавна
 
     renderer = new THREE.WebGLRenderer({ antialias: false });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -37,8 +36,12 @@ function init() {
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
     wallTex.magFilter = THREE.NearestFilter; 
     
+    const floorTex = loader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
+    floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
+    floorTex.repeat.set(200, 200); 
+
     scene.add(new THREE.AmbientLight(0x220000, 0.5)); 
-    playerLight = new THREE.PointLight(0xffffff, 1.2, 12);
+    playerLight = new THREE.PointLight(0xffffff, 1.2, 15);
     scene.add(playerLight);
 
     const wallGeo = new THREE.BoxGeometry(1.05, 4, 1.05);
@@ -58,12 +61,14 @@ function init() {
         });
     });
 
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+    const planeGeo = new THREE.PlaneGeometry(2000, 2000);
+    const floor = new THREE.Mesh(planeGeo, new THREE.MeshStandardMaterial({ map: floorTex }));
     floor.rotation.x = -Math.PI / 2;
+    floor.position.set(40, 0, 40);
     scene.add(floor);
 
-    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ color: 0x080808 }));
-    ceil.rotation.x = Math.PI / 2; ceil.position.y = 4;
+    const ceil = new THREE.Mesh(planeGeo, new THREE.MeshStandardMaterial({ color: 0x080808 }));
+    ceil.rotation.x = Math.PI / 2; ceil.position.set(40, 4, 40);
     scene.add(ceil);
 
     window.addEventListener('keydown', e => { 
@@ -166,12 +171,11 @@ function animate() {
         camera.position.copy(oldP);
     }
 
-    // ЭФФЕКТ ПОКАЧИВАНИЯ
     const weaponImg = document.getElementById('weapon');
     if (isMoving && !isShooting) {
-        bobbingCounter += currentSpeed * 2;
-        const bobX = Math.cos(bobbingCounter) * 15;
-        const bobY = Math.abs(Math.sin(bobbingCounter)) * 15;
+        bobbingCounter += currentSpeed * 2.5;
+        const bobX = Math.cos(bobbingCounter) * 12;
+        const bobY = Math.abs(Math.sin(bobbingCounter)) * 12;
         weaponImg.style.transform = `translateX(calc(-50% + ${bobX}px))`;
         weaponImg.style.bottom = (60 + bobY) + "px";
     } else if (!isShooting) {
