@@ -8,7 +8,6 @@ let isReloading = false, isShooting = false, monsters = [];
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, KeyR: false };
 let pitch = 0, mixers = [], clock = new THREE.Clock();
 
-// Переменные для карты (Правка №24)
 const minimapCanvas = document.getElementById('minimap');
 const minimapCtx = minimapCanvas.getContext('2d');
 minimapCanvas.width = 150; minimapCanvas.height = 150;
@@ -41,9 +40,9 @@ function init() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    playerLight = new THREE.PointLight(0xffffff, 2.5, 15); // Яркость выше
+    playerLight = new THREE.PointLight(0xffffff, 2.5, 15);
     scene.add(playerLight);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.4)); // Общий свет для теста видимости
+    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
 
     const loader = new THREE.TextureLoader();
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
@@ -79,19 +78,22 @@ function init() {
     });
     window.addEventListener('mousedown', () => { if (document.pointerLockElement) shoot(); });
 
-    // Спавним 3D монстров (Правка №25 - путь и масштаб)
     spawn3DMonster(5, 5);
-    spawn3DMonster(10, 10);
-    
     animate();
 }
 
 function spawn3DMonster(x, z) {
     const gltfLoader = new GLTFLoader();
-    gltfLoader.load(path + 'assets/models/monster.glb', (gltf) => {
+    // ИСПРАВЛЕННЫЙ ПУТЬ СОГЛАСНО ТВОИМ ДАННЫМ
+    const modelPath = path + 'assets/sprites/models/monster.glb';
+    
+    gltfLoader.load(modelPath, (gltf) => {
         const model = gltf.scene;
         model.position.set(x, 0, z);
-        model.scale.set(1.5, 1.5, 1.5); // Увеличил масштаб
+        
+        // Правка №28: Авто-масштабирование (если модель очень маленькая)
+        model.scale.set(1.5, 1.5, 1.5); 
+        
         scene.add(model);
 
         if (gltf.animations.length > 0) {
@@ -100,9 +102,63 @@ function spawn3DMonster(x, z) {
             mixers.push(mixer);
         }
 
-        model.userData = { health: 60, speed: 0.02, pos: new THREE.Vector2(x, z) };
+        model.userData = { health: 60, speed: 0.02 };
         monsters.push(model);
-    }, undefined, (err) => console.error("Ошибка загрузки monster.glb! Проверь папку assets/models/"));
+        console.log("Монстр найден и загружен из assets/sprites/models/");
+    }, undefined, (err) => {
+        console.error("ОШИБКА: Файл все еще не найден! Проверь путь: " + modelPath);
+    });
+}
+
+function shoot() {
+    if (isShooting || isReloading || pistolMag <= 0) return;
+    isShooting = true;
+    pistolMag--;
+    document.getElementById('mag').innerText = pistolMag;
+    
+    if (shotSound && shotSound.buffer) {
+        if (shotSound.isPlaying) shotSound.stop();
+        shotSound.play();
+    }
+
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+    const intersects = raycaster.intersectObjects(monsters, true);
+    
+    if (intersects.length > 0) {
+        let target = intersects[0].object;
+        while(target.parent && !target.userData.health) { target = target.parent; }
+        
+        if (target.userData.health) {
+            target.userData.health -= 30;
+            if (target.userData.health <= 0) {
+                scene.remove(target);
+                monsters = monsters.filter(m => m !== target);
+            }
+        }
+    }
+
+    const weapon = document.getElementById('weapon');
+    weapon.style.transform = `translateY(${pitch * 25 + 60}px) scale(1.1)`;
+    setTimeout(() => {
+        weapon.style.transform = `translateY(${pitch * 25}px)`;
+        isShooting = false;
+        if (pistolMag === 0) reloadPistol();
+    }, 100);
+}
+
+function reloadPistol() {
+    if (isReloading || pistolMag === 10 || pistolTotal <= 0) return;
+    isReloading = true;
+    if (reloadSound && reloadSound.buffer) reloadSound.play();
+    document.getElementById('weapon').classList.add('reloading');
+    setTimeout(() => {
+        let toReload = Math.min(10 - pistolMag, pistolTotal);
+        pistolMag += toReload; pistolTotal -= toReload;
+        document.getElementById('mag').innerText = pistolMag;
+        document.getElementById('weapon').classList.remove('reloading');
+        isReloading = false;
+    }, 1200);
 }
 
 function setupBackgroundMusic() {
@@ -125,48 +181,42 @@ function startGame() {
     bgMusicHTML.play();
 }
 
-// Отрисовка миникарты (Правка №24)
 function drawMinimap() {
     minimapCtx.clearRect(0, 0, 150, 150);
-    const zoom = 10;
-    const centerX = minimapCanvas.width / 2;
-    const centerY = minimapCanvas.height / 2;
+    const zoom = 8;
+    const centerX = 75;
+    const centerY = 75;
 
-    // Стены
     minimapCtx.fillStyle = "#300";
-    levelData.map.forEach((row, z) => {
-        row.forEach((cell, x) => {
-            if (cell === 1) {
-                const drawX = centerX + (x - camera.position.x) * zoom;
-                const drawZ = centerY + (z - camera.position.z) * zoom;
-                minimapCtx.fillRect(drawX, drawZ, zoom, zoom);
-            }
+    if (levelData) {
+        levelData.map.forEach((row, z) => {
+            row.forEach((cell, x) => {
+                if (cell === 1) {
+                    const dx = centerX + (x - camera.position.x) * zoom;
+                    const dz = centerY + (z - camera.position.z) * zoom;
+                    minimapCtx.fillRect(dx, dz, zoom, zoom);
+                }
+            });
         });
-    });
+    }
 
-    // Монстры
     minimapCtx.fillStyle = "#f00";
     monsters.forEach(m => {
-        const drawX = centerX + (m.position.x - camera.position.x) * zoom;
-        const drawZ = centerY + (m.position.z - camera.position.z) * zoom;
+        const dx = centerX + (m.position.x - camera.position.x) * zoom;
+        const dz = centerY + (m.position.z - camera.position.z) * zoom;
         minimapCtx.beginPath();
-        minimapCtx.arc(drawX, drawZ, 3, 0, Math.PI * 2);
+        minimapCtx.arc(dx, dz, 3, 0, Math.PI * 2);
         minimapCtx.fill();
     });
 
-    // Игрок (Стрелка)
     minimapCtx.save();
     minimapCtx.translate(centerX, centerY);
     minimapCtx.rotate(-camera.rotation.y);
     minimapCtx.fillStyle = "#0f0";
     minimapCtx.beginPath();
-    minimapCtx.moveTo(0, -5); minimapCtx.lineTo(4, 5); minimapCtx.lineTo(-4, 5);
+    minimapCtx.moveTo(0, -6); minimapCtx.lineTo(4, 4); minimapCtx.lineTo(-4, 4);
     minimapCtx.fill();
     minimapCtx.restore();
-
-    // Компас
-    const dir = Math.round((camera.rotation.y * 180 / Math.PI) % 360);
-    document.getElementById('compass').innerText = `К: ${dir}°`;
 }
 
 function animate() {
@@ -174,7 +224,6 @@ function animate() {
     const delta = clock.getDelta();
     mixers.forEach(m => m.update(delta));
 
-    // Движение
     const oldP = camera.position.clone();
     const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
     const moveDir = dir.clone().setY(0).normalize();
@@ -187,19 +236,17 @@ function animate() {
     if (physics && physics.checkCollision(camera.position.x, camera.position.z)) camera.position.copy(oldP);
 
     playerLight.position.copy(camera.position);
-    playerLight.position.y += 0.5;
 
-    // Монстры
     monsters.forEach(m => {
         const dist = m.position.distanceTo(camera.position);
         if (dist < 15) {
             const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
-            m.position.x += dirM.x * m.userData.speed;
-            m.position.z += dirM.z * m.userData.speed;
+            m.position.x += dirM.x * 0.02;
+            m.position.z += dirM.z * 0.02;
             m.lookAt(camera.position.x, 0, camera.position.z);
         }
     });
 
-    drawMinimap(); // Обновляем карту
+    drawMinimap();
     renderer.render(scene, camera);
 }
