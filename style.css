@@ -7,38 +7,22 @@ body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courie
 }
 
 .start-box {
-    text-align: center;
-    border: 2px solid #600;
-    padding: 60px;
-    background: rgba(0, 0, 0, 0.8);
-    box-shadow: 0 0 30px #400;
+    text-align: center; border: 2px solid #600; padding: 60px;
+    background: rgba(0, 0, 0, 0.8); box-shadow: 0 0 30px #400;
 }
 
 .horror-title {
-    color: #f00;
-    font-size: 60px;
-    letter-spacing: 10px;
-    margin: 0 0 40px 0;
-    text-shadow: 5px 5px 0px #300;
+    color: #f00; font-size: 60px; letter-spacing: 10px;
+    margin: 0 0 40px 0; text-shadow: 5px 5px 0px #300;
 }
 
 #play-btn {
-    background: transparent;
-    border: 2px solid #f00;
-    color: #f00;
-    padding: 15px 50px;
-    font-size: 24px;
-    font-family: 'Courier New', monospace;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.3s;
+    background: transparent; border: 2px solid #f00; color: #f00;
+    padding: 15px 50px; font-size: 24px; font-family: 'Courier New', monospace;
+    font-weight: bold; cursor: pointer; transition: all 0.3s;
 }
 
-#play-btn:hover {
-    background: #f00;
-    color: #000;
-    box-shadow: 0 0 20px #f00;
-}
+#play-btn:hover { background: #f00; color: #000; box-shadow: 0 0 20px #f00; }
 
 #hud {
     position: absolute; bottom: 0; width: 100%; height: 80px;
