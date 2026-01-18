@@ -7,13 +7,17 @@ let levelData;
 // Настройки патронов
 let pistolMag = 10;
 let pistolTotal = 120;
-let shotgunAmmo = 40;
 let isReloading = false;
+
+// Монстры
+let monsters = [];
 
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false, KeyR: false };
 let pitch = 0;
 let isShooting = false;
-let shotSound;
+
+// Звуки
+let shotSound, reloadSound;
 const audioLoader = new THREE.AudioLoader();
 
 fetch('./levels/level1.json')
@@ -31,11 +35,19 @@ function init() {
 
     const listener = new THREE.AudioListener();
     camera.add(listener);
-    shotSound = new THREE.Audio(listener);
     
+    // Загрузка звука выстрела
+    shotSound = new THREE.Audio(listener);
     audioLoader.load('audio/sfx/shot.mp3', (buffer) => {
         shotSound.setBuffer(buffer);
         shotSound.setVolume(0.4);
+    });
+
+    // Загрузка звука перезарядки
+    reloadSound = new THREE.Audio(listener);
+    audioLoader.load('audio/sfx/reload.mp3', (buffer) => {
+        reloadSound.setBuffer(buffer);
+        reloadSound.setVolume(0.5);
     });
 
     renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -67,6 +79,7 @@ function init() {
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
+    // СОБЫТИЯ
     window.addEventListener('keydown', e => { 
         if(e.code in keys) keys[e.code] = true; 
         if(e.code === 'KeyR') reloadPistol();
@@ -91,7 +104,22 @@ function init() {
         }
     });
 
+    // Создадим первого пробного монстра (визуально)
+    spawnMonster(5, 5);
+
     animate();
+}
+
+function spawnMonster(x, z) {
+    const loader = new THREE.TextureLoader();
+    const spriteMap = loader.load('assets/sprites/monster.png'); // Убедись, что файл есть
+    const spriteMat = new THREE.SpriteMaterial({ map: spriteMap });
+    const monster = new THREE.Sprite(spriteMat);
+    monster.position.set(x, 1, z);
+    monster.scale.set(2, 2, 1);
+    monster.userData = { health: 50 };
+    scene.add(monster);
+    monsters.push(monster);
 }
 
 function updateWeaponPosition(offsetY = 0) {
@@ -106,13 +134,18 @@ function reloadPistol() {
     
     isReloading = true;
     const weapon = document.getElementById('weapon');
+    
+    // Включаем звук перезарядки
+    if (reloadSound.buffer) {
+        if (reloadSound.isPlaying) reloadSound.stop();
+        reloadSound.play();
+    }
+
     weapon.classList.add('reloading');
 
-    // Общее время перезарядки 2 секунды (2000мс)
     setTimeout(() => {
         let needed = 10 - pistolMag;
         let toReload = Math.min(needed, pistolTotal);
-        
         pistolMag += toReload;
         pistolTotal -= toReload;
 
@@ -124,14 +157,12 @@ function reloadPistol() {
         setTimeout(() => {
             isReloading = false;
             updateWeaponPosition();
-        }, 600); // Время на подъем оружия
-
-    }, 1400); // Время нахождения внизу
+        }, 600);
+    }, 1400); 
 }
 
 function shoot() {
     if (isShooting || isReloading) return;
-
     if (pistolMag <= 0) {
         reloadPistol();
         return;
@@ -146,9 +177,24 @@ function shoot() {
         shotSound.play();
     }
 
+    // Простая логика попадания (Raycasting)
+    const raycaster = new THREE.Raycaster();
+    const center = new THREE.Vector2(0, 0); // Центр экрана
+    raycaster.setFromCamera(center, camera);
+    const intersects = raycaster.intersectObjects(monsters);
+
+    if (intersects.length > 0) {
+        let hitMonster = intersects[0].object;
+        hitMonster.userData.health -= 25;
+        console.log("Попадание в монстра! HP:", hitMonster.userData.health);
+        if (hitMonster.userData.health <= 0) {
+            scene.remove(hitMonster);
+            monsters = monsters.filter(m => m !== hitMonster);
+        }
+    }
+
     const weapon = document.getElementById('weapon');
     playerLight.intensity = 15;
-    
     weapon.style.transition = "none";
     weapon.style.transform = `translateY(${pitch * 20 + 70}px) scale(1.1) rotate(-5deg)`;
 
@@ -157,7 +203,6 @@ function shoot() {
         weapon.style.transition = "transform 0.1s ease-out";
         updateWeaponPosition();
         isShooting = false;
-        
         if (pistolMag === 0) reloadPistol();
     }, 80);
 }
@@ -170,7 +215,6 @@ function animate() {
     camera.getWorldDirection(dir); 
     const moveDir = dir.clone();
     moveDir.y = 0; moveDir.normalize();
-    
     const side = new THREE.Vector3().crossVectors(camera.up, moveDir).normalize();
     const oldP = camera.position.clone();
 
