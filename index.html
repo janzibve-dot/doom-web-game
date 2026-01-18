@@ -13,11 +13,15 @@
         </div>
     </div>
 
-    <div id="minimap-container">
-        <canvas id="minimap"></canvas>
-        <div id="compass">С</div>
+    <div id="death-screen" style="display: none;">
+        <div class="death-box">
+            <h1 class="death-title">ТЫ ПОГИБ</h1>
+            <p id="stats-text">Убито: 0 | Время: 0с</p>
+            <button onclick="location.reload()">ЕЩЕ РАЗ</button>
+        </div>
     </div>
 
+    <div id="kill-counter">УБИТО: 0</div>
     <div id="damage-flash"></div>
 
     <div id="hud">
