@@ -9,6 +9,9 @@ let monsters = [], mixers = [], clock = new THREE.Clock();
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false, KeyR: false };
 let pitch = 0;
 
+let shotSound, reloadSound, bgMusicHTML, heartbeatSound, flickerSound;
+const audioLoader = new THREE.AudioLoader();
+const listener = new THREE.AudioListener();
 const path = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
 
 fetch(path + 'levels/level1.json').then(r => r.json()).then(data => { 
@@ -20,17 +23,19 @@ fetch(path + 'levels/level1.json').then(r => r.json()).then(data => {
 function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000); 
-    scene.fog = new THREE.Fog(0x000000, 1, 8); // Туман: полная тьма на 8 метрах
+    scene.fog = new THREE.Fog(0x000000, 1, 8); 
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
     camera.position.set(1.5, 1.6, 1.5);
     camera.rotation.order = 'YXZ'; 
+    camera.add(listener);
 
     renderer = new THREE.WebGLRenderer({ antialias: false });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // Фонарик (SpotLight)
+    loadAllSounds();
+
     playerLight = new THREE.SpotLight(0xffffff, 4, 15, Math.PI/4, 0.5);
     playerLight.decay = 2;
     scene.add(playerLight);
@@ -40,7 +45,6 @@ function init() {
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
 
-    // Отрисовка огромной карты 80x80
     levelData.map.forEach((row, z) => {
         row.forEach((cell, x) => {
             if (cell === 1) {
@@ -73,17 +77,44 @@ function init() {
     });
     window.addEventListener('mousedown', () => { if (document.pointerLockElement) shoot(); });
 
-    // Спавн монстров
     for(let i=0; i<15; i++) {
         let rx, rz;
         do {
-            rx = Math.floor(Math.random() * 70) + 5;
-            rz = Math.floor(Math.random() * 70) + 5;
-        } while (levelData.map[rz][rx] === 1);
+            rx = Math.floor(Math.random() * (levelData.map[0].length - 2)) + 1;
+            rz = Math.floor(Math.random() * (levelData.map.length - 2)) + 1;
+        } while (levelData.map[rz] && levelData.map[rz][rx] === 1);
         spawn3DMonster(rx, rz);
     }
     
     animate();
+}
+
+function loadAllSounds() {
+    bgMusicHTML = new Audio(path + 'FON1.ogg');
+    bgMusicHTML.loop = true;
+    bgMusicHTML.volume = 0.1;
+
+    shotSound = new THREE.Audio(listener);
+    audioLoader.load(path + 'audio/sfx/shot.mp3', buffer => shotSound.setBuffer(buffer));
+
+    reloadSound = new THREE.Audio(listener);
+    audioLoader.load(path + 'audio/sfx/reload.mp3', buffer => reloadSound.setBuffer(buffer));
+
+    flickerSound = new THREE.Audio(listener);
+    audioLoader.load(path + 'audio/sfx/flicker.mp3', buffer => {
+        flickerSound.setBuffer(buffer);
+        flickerSound.setLoop(true);
+        flickerSound.setVolume(0);
+        flickerSound.play();
+    });
+
+    heartbeatSound = new THREE.Audio(listener);
+    audioLoader.load(path + 'audio/sfx/heartbeat.mp3', buffer => {
+        heartbeatSound.setBuffer(buffer);
+        heartbeatSound.setLoop(true);
+        heartbeatSound.setVolume(0);
+        heartbeatSound.play();
+    });
 }
 
 function spawn3DMonster(x, z) {
@@ -96,12 +127,13 @@ function spawn3DMonster(x, z) {
 
         if (gltf.animations.length > 0) {
             const mixer = new THREE.AnimationMixer(model);
-            const action = mixer.clipAction(gltf.animations[0]);
-            action.time = 3; 
+            const clip = gltf.animations[0];
+            const action = mixer.clipAction(clip);
+            action.time = 3; // Пропуск первых 3 секунд
             action.play();
             mixers.push(mixer);
         }
-        model.userData = { health: 100, speed: 0.04 };
+        model.userData = { health: 100, speed: 0.045 };
         monsters.push(model);
     });
 }
@@ -111,7 +143,7 @@ function animate() {
     const delta = clock.getDelta();
     mixers.forEach(m => m.update(delta));
 
-    let minMonsterDist = 15; // Для расчета мерцания
+    let minMonsterDist = 20;
 
     if (document.pointerLockElement) {
         const oldP = camera.position.clone();
@@ -130,7 +162,6 @@ function animate() {
             camera.position.copy(oldP);
         }
 
-        // Обновляем фонарик
         playerLight.position.copy(camera.position);
         const targetPos = new THREE.Vector3();
         camera.getWorldDirection(targetPos);
@@ -142,7 +173,7 @@ function animate() {
         const dist = m.position.distanceTo(camera.position);
         if (dist < minMonsterDist) minMonsterDist = dist;
 
-        if (dist < 10) { 
+        if (dist < 12) { 
             const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
             if (physics && !physics.checkCollision(m.position.x + dirM.x*0.4, m.position.z + dirM.z*0.4)) {
                 m.position.x += dirM.x * m.userData.speed;
@@ -151,7 +182,7 @@ function animate() {
             m.lookAt(camera.position.x, 0, camera.position.z);
 
             if (dist < 1.4 && now - lastDamageTime > 1000) {
-                playerHP -= 20;
+                playerHP -= 25;
                 document.getElementById('hp-bar-fill').style.width = playerHP + "%";
                 lastDamageTime = now;
                 if (playerHP <= 0) location.reload();
@@ -159,27 +190,32 @@ function animate() {
         }
     });
 
-    // ПРАВКА №58: Логика мерцания фонарика
-    if (minMonsterDist < 5) {
-        // Чем ближе монстр, тем выше шанс мерцания
-        if (Math.random() > (minMonsterDist / 5)) {
-            playerLight.intensity = Math.random() * 0.5;
+    if (minMonsterDist < 7) {
+        let intensity = 1 - (minMonsterDist / 7);
+        if (heartbeatSound) heartbeatSound.setVolume(intensity);
+        if (flickerSound) flickerSound.setVolume(intensity * 0.5);
+
+        if (Math.random() > (minMonsterDist / 7)) {
+            playerLight.intensity = Math.random() * 0.3;
         } else {
             playerLight.intensity = 4;
         }
     } else {
+        if (heartbeatSound) heartbeatSound.setVolume(0);
+        if (flickerSound) flickerSound.setVolume(0);
         playerLight.intensity = 4;
     }
 
     renderer.render(scene, camera);
 }
 
-// Функции стрельбы и перезарядки (исправленные ранее)
 function shoot() {
     if (isShooting || isReloading || pistolMag <= 0) return;
     isShooting = true;
     pistolMag--;
     document.getElementById('mag').innerText = pistolMag;
+    if (shotSound && shotSound.buffer) { if (shotSound.isPlaying) shotSound.stop(); shotSound.play(); }
+
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
     const intersects = raycaster.intersectObjects(monsters, true);
@@ -187,7 +223,7 @@ function shoot() {
         let obj = intersects[0].object;
         while (obj && !obj.userData.health) obj = obj.parent;
         if (obj && obj.userData.health) {
-            obj.userData.health -= 34;
+            obj.userData.health -= 35;
             if (obj.userData.health <= 0) {
                 scene.remove(obj);
                 monsters = monsters.filter(m => m !== obj);
@@ -196,16 +232,13 @@ function shoot() {
     }
     const weapon = document.getElementById('weapon');
     weapon.style.transform = `translateY(${pitch * 25 + 60}px) scale(1.1)`;
-    setTimeout(() => {
-        weapon.style.transform = `translateY(${pitch * 25}px)`;
-        isShooting = false;
-        if (pistolMag === 0) reloadPistol();
-    }, 100);
+    setTimeout(() => { weapon.style.transform = `translateY(${pitch * 25}px)`; isShooting = false; if (pistolMag === 0) reloadPistol(); }, 100);
 }
 
 function reloadPistol() {
     if (isReloading || pistolMag === 10 || pistolTotal <= 0) return;
     isReloading = true;
+    if (reloadSound && reloadSound.buffer) reloadSound.play();
     document.getElementById('weapon').classList.add('reloading');
     setTimeout(() => {
         let toReload = Math.min(10 - pistolMag, pistolTotal);
@@ -220,11 +253,6 @@ function reloadPistol() {
 function startGame() {
     document.getElementById('start-screen').style.display = 'none';
     document.body.requestPointerLock();
+    if (listener.context.state === 'suspended') listener.context.resume();
     bgMusicHTML.play();
-}
-
-function setupBackgroundMusic() {
-    bgMusicHTML = new Audio(path + 'FON1.ogg');
-    bgMusicHTML.loop = true;
-    bgMusicHTML.volume = 0.15; 
 }
