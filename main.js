@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { Physics } from './engine/physics.js';
+// Подключаем загрузчик 3D моделей
+import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
 
 let scene, camera, renderer, physics, playerLight;
 let levelData, playerHP = 100, pistolMag = 10, pistolTotal = 120;
@@ -7,6 +9,10 @@ let isReloading = false, isShooting = false, lastDamageTime = 0;
 let monsters = [];
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false, KeyR: false };
 let pitch = 0;
+
+// Анимационный движок
+let mixers = []; 
+const clock = new THREE.Clock();
 
 let shotSound, reloadSound, bgMusicHTML;
 const audioLoader = new THREE.AudioLoader();
@@ -27,6 +33,7 @@ function init() {
     scene.background = new THREE.Color(0x010101);
     scene.fog = new THREE.Fog(0x000000, 1, 15);
 
+    // Камера с near: 0.01 для защиты от прозрачности
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
     camera.position.set(2, 1.6, 2);
     camera.rotation.order = 'YXZ'; 
@@ -39,7 +46,6 @@ function init() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // Основной свет фонарика
     playerLight = new THREE.PointLight(0xffffff, 1.3, 12);
     playerLight.decay = 2;
     scene.add(playerLight);
@@ -62,13 +68,12 @@ function init() {
         });
     });
 
-    // Бетонный пол
+    // Бетонный грязный пол
     const floorMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), floorMat);
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
-    // Правка №13: Запуск по кнопке СТАРТ
     document.getElementById('play-btn').addEventListener('click', startGame);
 
     window.addEventListener('keydown', e => { if(e.code in keys) keys[e.code] = true; if(e.code === 'KeyR') reloadPistol(); });
@@ -84,14 +89,38 @@ function init() {
     });
     window.addEventListener('mousedown', () => { if (document.pointerLockElement) shoot(); });
 
-    spawnMonster(5, 5);
+    // Спавним 3D монстров
+    spawn3DMonster(5, 5);
+    spawn3DMonster(12, 8);
+    
     animate();
+}
+
+function spawn3DMonster(x, z) {
+    const gltfLoader = new GLTFLoader();
+    gltfLoader.load(path + 'assets/models/monster.glb', (gltf) => {
+        const model = gltf.scene;
+        model.position.set(x, 0, z);
+        model.scale.set(1.3, 1.3, 1.3); // Настройка размера модели
+        scene.add(model);
+
+        // Подключаем анимации из файла GLB
+        if (gltf.animations.length > 0) {
+            const mixer = new THREE.AnimationMixer(model);
+            const action = mixer.clipAction(gltf.animations[0]); // Играем первую анимацию (Idle/Walk)
+            action.play();
+            mixers.push(mixer);
+        }
+
+        model.userData = { health: 60, speed: 0.018 };
+        monsters.push(model);
+    }, undefined, (err) => console.error("Ошибка загрузки monster.glb!", err));
 }
 
 function setupBackgroundMusic() {
     bgMusicHTML = new Audio(path + 'FON1.ogg');
     bgMusicHTML.loop = true;
-    bgMusicHTML.volume = 0.15; 
+    bgMusicHTML.volume = 0.15; // Тихий фон
 }
 
 function loadSFX() {
@@ -106,19 +135,6 @@ function startGame() {
     document.body.requestPointerLock();
     if (listener.context.state === 'suspended') listener.context.resume();
     bgMusicHTML.play();
-}
-
-function spawnMonster(x, z) {
-    const loader = new THREE.TextureLoader();
-    loader.load(path + 'assets/sprites/monster.png', (texture) => {
-        const spriteMat = new THREE.SpriteMaterial({ map: texture });
-        const monster = new THREE.Sprite(spriteMat);
-        monster.position.set(x, 1.2, z);
-        monster.scale.set(2, 2, 1);
-        monster.userData = { health: 50, speed: 0.015 };
-        scene.add(monster);
-        monsters.push(monster);
-    });
 }
 
 function updateWeaponPosition() {
@@ -150,13 +166,20 @@ function shoot() {
 
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-    const intersects = raycaster.intersectObjects(monsters);
+    
+    // Проверка попадания в 3D модель (включая все ее части)
+    const intersects = raycaster.intersectObjects(monsters, true);
     if (intersects.length > 0) {
-        let m = intersects[0].object;
-        m.userData.health -= 25;
-        if (m.userData.health <= 0) {
-            scene.remove(m);
-            monsters = monsters.filter(mon => mon !== m);
+        let target = intersects[0].object;
+        // Ищем корень модели, где лежат HP
+        while(target.parent && !target.userData.health) { target = target.parent; }
+        
+        if (target.userData.health) {
+            target.userData.health -= 30;
+            if (target.userData.health <= 0) {
+                scene.remove(target);
+                monsters = monsters.filter(m => m !== target);
+            }
         }
     }
 
@@ -173,6 +196,11 @@ function shoot() {
 
 function animate() {
     requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+
+    // Обновляем анимации монстров (Правка №18)
+    mixers.forEach(m => m.update(delta));
+
     const oldP = camera.position.clone();
     const dir = new THREE.Vector3();
     camera.getWorldDirection(dir);
@@ -189,11 +217,11 @@ function animate() {
         camera.position.copy(oldP);
     }
 
-    // Правка №15: Редкое мерцание фонарика
-    if (Math.random() > 0.98) { // Шанс мерцания в кадре
-        playerLight.intensity = Math.random() * 0.5; // Резкое падение яркости
+    // Редкое мерцание фонарика (Правка №15)
+    if (Math.random() > 0.985) {
+        playerLight.intensity = Math.random() * 0.4;
     } else {
-        playerLight.intensity = THREE.MathUtils.lerp(playerLight.intensity, 1.3, 0.1); // Плавный возврат к норме
+        playerLight.intensity = THREE.MathUtils.lerp(playerLight.intensity, 1.3, 0.05);
     }
 
     playerLight.position.copy(camera.position);
@@ -206,6 +234,10 @@ function animate() {
             const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
             m.position.x += dirM.x * m.userData.speed;
             m.position.z += dirM.z * m.userData.speed;
+            
+            // Монстр всегда разворачивается к игроку
+            m.lookAt(camera.position.x, 0, camera.position.z);
+
             if (dist < 1.3 && now - lastDamageTime > 1200) {
                 playerHP -= 20;
                 document.getElementById('hp-bar-fill').style.width = playerHP + "%";
