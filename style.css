@@ -1,4 +1,9 @@
-body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
+body { 
+    margin: 0; 
+    overflow: hidden; 
+    background-color: #000; 
+    font-family: sans-serif; 
+}
 #hud {
     position: absolute; bottom: 0; width: 100%; height: 60px;
     background: #222; border-top: 3px solid #444;
@@ -18,4 +23,5 @@ body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-se
     background-image: url('https://raw.githubusercontent.com/pajadam/pajadam.github.io/master/doom-assets/shotgun.png');
     background-size: contain; background-repeat: no-repeat;
     pointer-events: none; z-index: 2;
+    transition: bottom 0.1s ease-out;
 }
