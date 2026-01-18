@@ -20,7 +20,7 @@ window.addEventListener('DOMContentLoaded', () => {
         levelData = data; 
         physics = new Physics(levelData);
         init(); 
-    });
+    }).catch(e => console.error("Карта не загружена:", e));
 });
 
 function init() {
@@ -28,17 +28,18 @@ function init() {
     scene.background = new THREE.Color(0x000000); 
     scene.fog = new THREE.Fog(0x000000, 0.1, 12); 
 
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500);
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 300);
     camera.position.set(2, 1.6, 2);
     camera.rotation.order = 'YXZ'; 
     camera.add(listener);
 
     renderer = new THREE.WebGLRenderer({ 
         antialias: true, 
-        logarithmicDepthBuffer: true, // Решает проблему мерцания текстур
+        logarithmicDepthBuffer: true,
         precision: "highp" 
     });
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     document.body.appendChild(renderer.domElement);
 
     loadAllSounds();
@@ -47,18 +48,18 @@ function init() {
     scene.add(playerLight);
     scene.add(playerLight.target);
 
-    // ОПТИМИЗАЦИЯ МИРА: Объединение всей геометрии в 3 объекта
-    const wallGeometries = [], floorGeometries = [], ceilGeometries = [];
+    // Оптимизация: Сборка лабиринта
+    const wallGeoms = [], floorGeoms = [], ceilGeoms = [];
     const wallBox = new THREE.BoxGeometry(1, 4, 1);
     const tileBox = new THREE.BoxGeometry(1, 0.1, 1);
 
     levelData.map.forEach((row, z) => {
         row.forEach((cell, x) => {
             if (cell === 1) {
-                const g = wallBox.clone(); g.translate(x, 2, z); wallGeometries.push(g);
+                const g = wallBox.clone(); g.translate(x, 2, z); wallGeoms.push(g);
             } else {
-                const f = tileBox.clone(); f.translate(x, 0, z); floorGeometries.push(f);
-                const c = tileBox.clone(); c.translate(x, 4, z); ceilGeometries.push(c);
+                const f = tileBox.clone(); f.translate(x, 0, z); floorGeoms.push(f);
+                const c = tileBox.clone(); c.translate(x, 4, z); ceilGeoms.push(c);
             }
         });
     });
@@ -66,9 +67,9 @@ function init() {
     const wallTex = new THREE.TextureLoader().load('https://threejs.org/examples/textures/brick_diffuse.jpg');
     wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping;
 
-    scene.add(new THREE.Mesh(BufferGeometryUtils.mergeGeometries(wallGeometries), new THREE.MeshStandardMaterial({ map: wallTex })));
-    scene.add(new THREE.Mesh(BufferGeometryUtils.mergeGeometries(floorGeometries), new THREE.MeshStandardMaterial({ color: 0x050505 })));
-    scene.add(new THREE.Mesh(BufferGeometryUtils.mergeGeometries(ceilGeometries), new THREE.MeshStandardMaterial({ color: 0x080808 })));
+    scene.add(new THREE.Mesh(BufferGeometryUtils.mergeGeometries(wallGeoms), new THREE.MeshStandardMaterial({ map: wallTex })));
+    scene.add(new THREE.Mesh(BufferGeometryUtils.mergeGeometries(floorGeoms), new THREE.MeshStandardMaterial({ color: 0x050505 })));
+    scene.add(new THREE.Mesh(BufferGeometryUtils.mergeGeometries(ceilGeoms), new THREE.MeshStandardMaterial({ color: 0x080808 })));
 
     document.getElementById('play-btn').onclick = () => { if(!isGameStarted) startGame(); };
 
@@ -76,8 +77,8 @@ function init() {
     window.onkeyup = (e) => { if(isGameStarted && !isDead && e.code in keys) keys[e.code] = false; };
     window.onmousemove = (e) => {
         if (isGameStarted && document.pointerLockElement && !isDead) {
-            camera.rotation.y -= e.movementX * 0.002;
-            pitch -= e.movementY * 0.002;
+            camera.rotation.y -= e.movementX * 0.0022;
+            pitch -= e.movementY * 0.0022;
             pitch = Math.max(-1.3, Math.min(1.3, pitch));
             camera.rotation.x = pitch;
             document.getElementById('weapon').style.transform = `translateY(${pitch * 25}px)`;
@@ -94,7 +95,7 @@ function startGame() {
     document.getElementById('start-screen').style.display = 'none';
     document.body.requestPointerLock();
     if (listener.context.state === 'suspended') listener.context.resume();
-    if (bgMusicHTML) bgMusicHTML.play();
+    if (bgMusicHTML) bgMusicHTML.play().catch(() => {});
     setInterval(() => { if (monsters.length < 15 && !isDead) spawnRandomMonster(); }, 5000);
 }
 
@@ -108,10 +109,7 @@ function spawnRandomMonster() {
     new GLTFLoader().load(path + 'assets/sprites/models/monster.glb', (gltf) => {
         const model = gltf.scene;
         model.position.set(rx, 0, rz);
-        
-        // ОПТИМИЗАЦИЯ РАЗМЕРА: 1.3 (чуть ниже игрока, чтобы не пересекаться с потолком)
         model.scale.set(1.3, 1.3, 1.3);
-        
         scene.add(model);
         if (gltf.animations.length > 0) {
             const mixer = new THREE.AnimationMixer(model);
@@ -129,7 +127,6 @@ function animate() {
     if (!isGameStarted || isDead) return;
 
     const delta = clock.getDelta();
-    // ПРАВКА АНИМАЦИИ: Жесткий сброс цикла
     mixers.forEach((mObj) => {
         mObj.mixer.update(delta);
         const action = mObj.mixer._actions[0];
@@ -162,7 +159,6 @@ function animate() {
         if (dist < minMonsterDist) minMonsterDist = dist;
         if (dist < 12) { 
             const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
-            // Проверка, чтобы монстр не заходил в стену
             if (physics && !physics.checkCollision(m.position.x + dirM.x * 0.4, m.position.z + dirM.z * 0.4)) {
                 m.position.x += dirM.x * m.userData.speed; m.position.z += dirM.z * m.userData.speed;
             }
@@ -181,13 +177,13 @@ function animate() {
 
     if (minMonsterDist < 7.5) {
         let intensity = 1 - (minMonsterDist / 7.5);
-        if (heartbeatSound) heartbeatSound.setVolume(intensity);
-        if (flickerSound) flickerSound.setVolume(intensity * 0.5);
+        if (heartbeatSound && heartbeatSound.buffer) heartbeatSound.setVolume(intensity);
+        if (flickerSound && flickerSound.buffer) flickerSound.setVolume(intensity * 0.5);
         if (Math.random() > (minMonsterDist / 7.5)) playerLight.intensity = Math.random() * 0.2;
         else playerLight.intensity = 6;
     } else {
-        if (heartbeatSound) heartbeatSound.setVolume(0);
-        if (flickerSound) flickerSound.setVolume(0);
+        if (heartbeatSound && heartbeatSound.buffer) heartbeatSound.setVolume(0);
+        if (flickerSound && flickerSound.buffer) flickerSound.setVolume(0);
         playerLight.intensity = 6;
     }
     renderer.render(scene, camera);
@@ -251,8 +247,16 @@ function gameOver() {
 
 function loadAllSounds() {
     bgMusicHTML = new Audio(path + 'FON1.ogg'); bgMusicHTML.loop = true; bgMusicHTML.volume = 0.1;
-    shotSound = new THREE.Audio(listener); audioLoader.load(path + 'audio/sfx/shot.mp3', b => shotSound.setBuffer(b));
-    reloadSound = new THREE.Audio(listener); audioLoader.load(path + 'audio/sfx/reload.mp3', b => reloadSound.setBuffer(b));
-    flickerSound = new THREE.Audio(listener); audioLoader.load(path + 'audio/sfx/flicker.mp3', b => { flickerSound.setBuffer(b); flickerSound.setLoop(true); flickerSound.setVolume(0); flickerSound.play(); });
-    heartbeatSound = new THREE.Audio(listener); audioLoader.load(path + 'audio/sfx/heartbeat.mp3', b => { heartbeatSound.setBuffer(b); heartbeatSound.setLoop(true); heartbeatSound.setVolume(0); heartbeatSound.play(); });
+    const sfx = [
+        {name: 'shot', url: 'audio/sfx/shot.mp3', obj: shotSound = new THREE.Audio(listener)},
+        {name: 'reload', url: 'audio/sfx/reload.mp3', obj: reloadSound = new THREE.Audio(listener)},
+        {name: 'flicker', url: 'audio/sfx/flicker.mp3', obj: flickerSound = new THREE.Audio(listener), loop: true},
+        {name: 'heartbeat', url: 'audio/sfx/heartbeat.mp3', obj: heartbeatSound = new THREE.Audio(listener), loop: true}
+    ];
+    sfx.forEach(s => {
+        audioLoader.load(path + s.url, b => {
+            s.obj.setBuffer(b);
+            if (s.loop) { s.obj.setLoop(true); s.obj.setVolume(0); s.obj.play(); }
+        }, undefined, e => console.warn(`Звук ${s.name} не загружен: ${s.url}`));
+    });
 }
