@@ -9,12 +9,10 @@ let monsters = [];
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false, KeyR: false };
 let pitch = 0;
 
-let shotSound, reloadSound;
-let bgMusicHTML; // Потоковое аудио для FON1.mp3
+let shotSound, reloadSound, bgMusicHTML;
 const audioLoader = new THREE.AudioLoader();
 const listener = new THREE.AudioListener();
 
-// Путь для GitHub
 const path = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
 
 fetch(path + 'levels/level1.json')
@@ -28,33 +26,33 @@ fetch(path + 'levels/level1.json')
 function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x010101);
-    scene.fog = new THREE.Fog(0x000000, 1, 20);
+    scene.fog = new THREE.Fog(0x000000, 1, 15);
 
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    // ИСПРАВЛЕНИЕ 1: Near plane установлен на 0.01, чтобы стены не исчезали вблизи
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
     camera.position.set(2, 1.6, 2);
     camera.rotation.order = 'YXZ'; 
     camera.add(listener);
 
-    // Инициализация звуков
-    loadSFX();
     setupBackgroundMusic();
+    loadSFX();
 
     renderer = new THREE.WebGLRenderer({ antialias: false });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // Освещение
-    playerLight = new THREE.PointLight(0xffffff, 2.5, 14);
+    // ИСПРАВЛЕНИЕ 2: Свет отодвинут от центра камеры и имеет меньшую интенсивность
+    playerLight = new THREE.PointLight(0xffffff, 1.5, 12);
     playerLight.decay = 2;
     scene.add(playerLight);
-    scene.add(new THREE.AmbientLight(0x404040, 0.2));
+    scene.add(new THREE.AmbientLight(0x222222, 0.2));
 
-    // Стены (программная шахматная текстура)
+    // Стены с четкой сеткой
     const canvas = document.createElement('canvas');
     canvas.width = 128; canvas.height = 128;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(0,0,128,128);
-    ctx.strokeStyle = '#333'; ctx.lineWidth = 10; ctx.strokeRect(0,0,128,128);
+    ctx.fillStyle = '#111'; ctx.fillRect(0,0,128,128);
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 4; ctx.strokeRect(0,0,128,128);
     const wallTexture = new THREE.CanvasTexture(canvas);
     wallTexture.wrapS = wallTexture.wrapT = THREE.RepeatWrapping;
     wallTexture.repeat.set(1, 2);
@@ -82,8 +80,8 @@ function init() {
     window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
     window.addEventListener('mousemove', e => {
         if (document.pointerLockElement) {
-            camera.rotation.y -= e.movementX * 0.0022;
-            pitch -= e.movementY * 0.0022;
+            camera.rotation.y -= e.movementX * 0.002;
+            pitch -= e.movementY * 0.002;
             pitch = Math.max(-1.4, Math.min(1.4, pitch));
             camera.rotation.x = pitch;
             updateWeaponPosition();
@@ -98,28 +96,21 @@ function init() {
 function setupBackgroundMusic() {
     bgMusicHTML = new Audio(path + 'audio/music/FON1.mp3');
     bgMusicHTML.loop = true;
-    bgMusicHTML.volume = 0.35;
-    bgMusicHTML.preload = 'auto';
+    bgMusicHTML.volume = 0.3;
 }
 
 function loadSFX() {
     shotSound = new THREE.Audio(listener);
-    audioLoader.load(path + 'audio/sfx/shot.mp3', (buffer) => { shotSound.setBuffer(buffer); shotSound.setVolume(0.8); });
-
+    audioLoader.load(path + 'audio/sfx/shot.mp3', (buffer) => { shotSound.setBuffer(buffer); shotSound.setVolume(0.6); });
     reloadSound = new THREE.Audio(listener);
-    audioLoader.load(path + 'audio/sfx/reload.mp3', (buffer) => { reloadSound.setBuffer(buffer); reloadSound.setVolume(0.6); });
+    audioLoader.load(path + 'audio/sfx/reload.mp3', (buffer) => { reloadSound.setBuffer(buffer); reloadSound.setVolume(0.4); });
 }
 
 function startGame() {
     document.getElementById('start-screen').style.display = 'none';
     document.body.requestPointerLock();
-    
-    if (listener.context.state === 'suspended') {
-        listener.context.resume();
-    }
-    
-    // Попытка запуска музыки
-    bgMusicHTML.play().catch(e => console.error("Ошибка автозапуска:", e));
+    if (listener.context.state === 'suspended') listener.context.resume();
+    bgMusicHTML.play().catch(() => console.log("Музыка FON1.mp3 не найдена"));
 }
 
 function spawnMonster(x, z) {
@@ -129,7 +120,7 @@ function spawnMonster(x, z) {
         const monster = new THREE.Sprite(spriteMat);
         monster.position.set(x, 1.2, z);
         monster.scale.set(2, 2, 1);
-        monster.userData = { health: 50, speed: 0.018 };
+        monster.userData = { health: 50, speed: 0.015 };
         scene.add(monster);
         monsters.push(monster);
     });
@@ -137,7 +128,7 @@ function spawnMonster(x, z) {
 
 function updateWeaponPosition() {
     const weapon = document.getElementById('weapon');
-    if (!isReloading) weapon.style.transform = `translateY(${pitch * 28}px)`;
+    if (!isReloading) weapon.style.transform = `translateY(${pitch * 25}px)`;
 }
 
 function reloadPistol() {
@@ -176,7 +167,7 @@ function shoot() {
 
     const weapon = document.getElementById('weapon');
     weapon.style.transition = "none";
-    weapon.style.transform = `translateY(${pitch * 28 + 90}px) scale(1.15) rotate(-3deg)`;
+    weapon.style.transform = `translateY(${pitch * 25 + 80}px) scale(1.1) rotate(-4deg)`;
     setTimeout(() => {
         weapon.style.transition = "transform 0.1s ease-out";
         updateWeaponPosition();
@@ -193,7 +184,7 @@ function animate() {
     const moveDir = dir.clone().setY(0).normalize();
     const sideDir = new THREE.Vector3().crossVectors(camera.up, moveDir).normalize();
     
-    let s = keys.ShiftLeft ? 0.13 : 0.06;
+    let s = keys.ShiftLeft ? 0.12 : 0.05;
     if (keys.KeyW) camera.position.addScaledVector(moveDir, s);
     if (keys.KeyS) camera.position.addScaledVector(moveDir, -s);
     if (keys.KeyA) camera.position.addScaledVector(sideDir, s);
@@ -203,8 +194,9 @@ function animate() {
         camera.position.copy(oldP);
     }
 
+    // ИСПРАВЛЕНИЕ 3: Позиция света чуть выше камеры, чтобы не слепить стену перед лицом
     playerLight.position.copy(camera.position);
-    playerLight.position.y += 0.2;
+    playerLight.position.y += 0.5;
 
     const now = Date.now();
     monsters.forEach(m => {
