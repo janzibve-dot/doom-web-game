@@ -10,6 +10,9 @@ let isShooting = false;
 let shotSound;
 const audioLoader = new THREE.AudioLoader();
 
+// Параметры обзора
+let pitch = 0; // Наклон вверх/вниз
+
 fetch('./levels/level1.json')
     .then(r => r.json())
     .then(data => { levelData = data; init(); });
@@ -21,6 +24,8 @@ function init() {
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 1000);
     camera.position.set(2, 1.6, 2);
+    // Важно: порядок вращения YXZ, чтобы Y (поворот) и X (наклон) не конфликтовали
+    camera.rotation.order = 'YXZ'; 
 
     const listener = new THREE.AudioListener();
     camera.add(listener);
@@ -71,12 +76,25 @@ function init() {
         }
     });
 
-    // КЛАССИЧЕСКОЕ УПРАВЛЕНИЕ КАМЕРОЙ
+    // ПОЛНЫЙ ОБЗОР: ВЛЕВО/ВПРАВО И ВВЕРХ/ВНИЗ
     window.addEventListener('mousemove', e => {
         if (document.pointerLockElement) {
+            // Поворот влево-вправо (Yaw)
             camera.rotation.y -= e.movementX * 0.002;
-            // Можно добавить ограничение по вертикали, если нужно
-            // camera.rotation.x -= e.movementY * 0.002; 
+
+            // Наклон вверх-вниз (Pitch)
+            pitch -= e.movementY * 0.002;
+            
+            // Ограничение наклона: примерно 80 градусов вверх и вниз
+            pitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitch));
+            camera.rotation.x = pitch;
+
+            // Двигаем пистолет вслед за взглядом (эффект параллакса)
+            const weapon = document.getElementById('weapon');
+            const weaponTilt = pitch * 20; // Величина смещения пистолета
+            if (!isShooting) {
+                weapon.style.transform = `translateY(${weaponTilt}px)`;
+            }
         }
     });
 
@@ -95,28 +113,17 @@ function shoot() {
     }
 
     const weapon = document.getElementById('weapon');
-    const crosshair = document.getElementById('crosshair');
-    
     playerLight.intensity = 15;
 
-    // Анимация оружия (отдача)
+    // Анимация отдачи с учетом текущего наклона
+    const currentTilt = pitch * 20;
     weapon.style.transition = "none";
-    weapon.style.transform = "translateY(60px) scale(1.1) rotate(-5deg)";
-
-    // Визуальный отклик прицела
-    crosshair.style.width = "12px";
-    crosshair.style.height = "12px";
-    crosshair.style.borderColor = "white";
+    weapon.style.transform = `translateY(${currentTilt + 60}px) scale(1.1) rotate(-5deg)`;
 
     setTimeout(() => {
         playerLight.intensity = 1.2;
         weapon.style.transition = "transform 0.1s ease-out";
-        weapon.style.transform = "translateY(0) scale(1) rotate(0deg)";
-        
-        crosshair.style.width = "6px";
-        crosshair.style.height = "6px";
-        crosshair.style.borderColor = "#0f0";
-        
+        weapon.style.transform = `translateY(${pitch * 20}px) scale(1) rotate(0deg)`;
         isShooting = false;
     }, 80);
 }
@@ -126,12 +133,17 @@ function animate() {
 
     let speed = keys.ShiftLeft ? 0.12 : 0.05;
     const dir = new THREE.Vector3();
-    camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
-    const side = new THREE.Vector3().crossVectors(camera.up, dir).normalize();
+    camera.getWorldDirection(dir); 
+    // Для ходьбы убираем Y, чтобы не взлетать, если смотрим вверх
+    const moveDir = dir.clone();
+    moveDir.y = 0; 
+    moveDir.normalize();
+    
+    const side = new THREE.Vector3().crossVectors(camera.up, moveDir).normalize();
     const oldP = camera.position.clone();
 
-    if (keys.KeyW) camera.position.addScaledVector(dir, speed);
-    if (keys.KeyS) camera.position.addScaledVector(dir, -speed);
+    if (keys.KeyW) camera.position.addScaledVector(moveDir, speed);
+    if (keys.KeyS) camera.position.addScaledVector(moveDir, -speed);
     if (keys.KeyA) camera.position.addScaledVector(side, speed);
     if (keys.KeyD) camera.position.addScaledVector(side, -speed);
 
