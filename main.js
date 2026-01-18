@@ -9,7 +9,8 @@ let monsters = [];
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false, KeyR: false };
 let pitch = 0;
 
-let shotSound, reloadSound, bgMusic;
+let shotSound, reloadSound;
+let bgMusicHTML; // Потоковое аудио для FON1.mp3
 const audioLoader = new THREE.AudioLoader();
 const listener = new THREE.AudioListener();
 
@@ -26,32 +27,34 @@ fetch(path + 'levels/level1.json')
 
 function init() {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x020202);
-    scene.fog = new THREE.Fog(0x000000, 1, 22);
+    scene.background = new THREE.Color(0x010101);
+    scene.fog = new THREE.Fog(0x000000, 1, 20);
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(2, 1.6, 2);
     camera.rotation.order = 'YXZ'; 
     camera.add(listener);
 
-    loadAudio();
+    // Инициализация звуков
+    loadSFX();
+    setupBackgroundMusic();
 
     renderer = new THREE.WebGLRenderer({ antialias: false });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // Улучшенный фонарик (чуть выше и ярче)
-    playerLight = new THREE.PointLight(0xffffff, 2.5, 15);
+    // Освещение
+    playerLight = new THREE.PointLight(0xffffff, 2.5, 14);
     playerLight.decay = 2;
     scene.add(playerLight);
-    scene.add(new THREE.AmbientLight(0x404040, 0.3));
+    scene.add(new THREE.AmbientLight(0x404040, 0.2));
 
-    // Текстура стен программно
+    // Стены (программная шахматная текстура)
     const canvas = document.createElement('canvas');
     canvas.width = 128; canvas.height = 128;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#222'; ctx.fillRect(0,0,128,128);
-    ctx.strokeStyle = '#444'; ctx.lineWidth = 8; ctx.strokeRect(0,0,128,128);
+    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(0,0,128,128);
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 10; ctx.strokeRect(0,0,128,128);
     const wallTexture = new THREE.CanvasTexture(canvas);
     wallTexture.wrapS = wallTexture.wrapT = THREE.RepeatWrapping;
     wallTexture.repeat.set(1, 2);
@@ -73,17 +76,14 @@ function init() {
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
-    document.getElementById('start-screen').addEventListener('click', startProject);
+    document.getElementById('start-screen').addEventListener('click', startGame);
 
-    window.addEventListener('keydown', e => { 
-        if(e.code in keys) keys[e.code] = true; 
-        if(e.code === 'KeyR') reloadPistol(); 
-    });
+    window.addEventListener('keydown', e => { if(e.code in keys) keys[e.code] = true; if(e.code === 'KeyR') reloadPistol(); });
     window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
     window.addEventListener('mousemove', e => {
         if (document.pointerLockElement) {
-            camera.rotation.y -= e.movementX * 0.002;
-            pitch -= e.movementY * 0.002;
+            camera.rotation.y -= e.movementX * 0.0022;
+            pitch -= e.movementY * 0.0022;
             pitch = Math.max(-1.4, Math.min(1.4, pitch));
             camera.rotation.x = pitch;
             updateWeaponPosition();
@@ -95,37 +95,31 @@ function init() {
     animate();
 }
 
-function loadAudio() {
-    bgMusic = new THREE.Audio(listener);
-    // ОБНОВЛЕННОЕ НАЗВАНИЕ ФАЙЛА
-    audioLoader.load(path + 'audio/music/FON1.mp3', (buffer) => {
-        bgMusic.setBuffer(buffer);
-        bgMusic.setLoop(true);
-        bgMusic.setVolume(0.35);
-        console.log("Новая музыка FON1.mp3 успешно загружена");
-    }, undefined, (err) => console.error("Ошибка: FON1.mp3 не найден!"));
-
-    shotSound = new THREE.Audio(listener);
-    audioLoader.load(path + 'audio/sfx/shot.mp3', (buffer) => {
-        shotSound.setBuffer(buffer);
-        shotSound.setVolume(0.7);
-    });
-
-    reloadSound = new THREE.Audio(listener);
-    audioLoader.load(path + 'audio/sfx/reload.mp3', (buffer) => {
-        reloadSound.setBuffer(buffer);
-        reloadSound.setVolume(0.5);
-    });
+function setupBackgroundMusic() {
+    bgMusicHTML = new Audio(path + 'audio/music/FON1.mp3');
+    bgMusicHTML.loop = true;
+    bgMusicHTML.volume = 0.35;
+    bgMusicHTML.preload = 'auto';
 }
 
-function startProject() {
+function loadSFX() {
+    shotSound = new THREE.Audio(listener);
+    audioLoader.load(path + 'audio/sfx/shot.mp3', (buffer) => { shotSound.setBuffer(buffer); shotSound.setVolume(0.8); });
+
+    reloadSound = new THREE.Audio(listener);
+    audioLoader.load(path + 'audio/sfx/reload.mp3', (buffer) => { reloadSound.setBuffer(buffer); reloadSound.setVolume(0.6); });
+}
+
+function startGame() {
     document.getElementById('start-screen').style.display = 'none';
     document.body.requestPointerLock();
-    if (listener.context.state === 'suspended') listener.context.resume();
     
-    setTimeout(() => {
-        if (bgMusic.buffer && !bgMusic.isPlaying) bgMusic.play();
-    }, 300);
+    if (listener.context.state === 'suspended') {
+        listener.context.resume();
+    }
+    
+    // Попытка запуска музыки
+    bgMusicHTML.play().catch(e => console.error("Ошибка автозапуска:", e));
 }
 
 function spawnMonster(x, z) {
@@ -135,7 +129,7 @@ function spawnMonster(x, z) {
         const monster = new THREE.Sprite(spriteMat);
         monster.position.set(x, 1.2, z);
         monster.scale.set(2, 2, 1);
-        monster.userData = { health: 50, speed: 0.015 };
+        monster.userData = { health: 50, speed: 0.018 };
         scene.add(monster);
         monsters.push(monster);
     });
@@ -143,7 +137,7 @@ function spawnMonster(x, z) {
 
 function updateWeaponPosition() {
     const weapon = document.getElementById('weapon');
-    if (!isReloading) weapon.style.transform = `translateY(${pitch * 25}px)`;
+    if (!isReloading) weapon.style.transform = `translateY(${pitch * 28}px)`;
 }
 
 function reloadPistol() {
@@ -182,7 +176,7 @@ function shoot() {
 
     const weapon = document.getElementById('weapon');
     weapon.style.transition = "none";
-    weapon.style.transform = `translateY(${pitch * 25 + 80}px) scale(1.1) rotate(-4deg)`;
+    weapon.style.transform = `translateY(${pitch * 28 + 90}px) scale(1.15) rotate(-3deg)`;
     setTimeout(() => {
         weapon.style.transition = "transform 0.1s ease-out";
         updateWeaponPosition();
@@ -199,7 +193,7 @@ function animate() {
     const moveDir = dir.clone().setY(0).normalize();
     const sideDir = new THREE.Vector3().crossVectors(camera.up, moveDir).normalize();
     
-    let s = keys.ShiftLeft ? 0.12 : 0.05;
+    let s = keys.ShiftLeft ? 0.13 : 0.06;
     if (keys.KeyW) camera.position.addScaledVector(moveDir, s);
     if (keys.KeyS) camera.position.addScaledVector(moveDir, -s);
     if (keys.KeyA) camera.position.addScaledVector(sideDir, s);
@@ -210,7 +204,7 @@ function animate() {
     }
 
     playerLight.position.copy(camera.position);
-    playerLight.position.y += 0.3;
+    playerLight.position.y += 0.2;
 
     const now = Date.now();
     monsters.forEach(m => {
@@ -219,7 +213,7 @@ function animate() {
             const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
             m.position.x += dirM.x * m.userData.speed;
             m.position.z += dirM.z * m.userData.speed;
-            if (dist < 1.2 && now - lastDamageTime > 1200) {
+            if (dist < 1.3 && now - lastDamageTime > 1200) {
                 playerHP -= 20;
                 document.getElementById('hp-bar-fill').style.width = playerHP + "%";
                 document.getElementById('hp-text').innerText = playerHP + "%";
