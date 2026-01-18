@@ -40,9 +40,10 @@ function init() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    playerLight = new THREE.PointLight(0xffffff, 2.5, 15);
+    // Увеличиваем интенсивность света, чтобы точно видеть модель
+    playerLight = new THREE.PointLight(0xffffff, 5, 20); 
     scene.add(playerLight);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0)); // Временный яркий свет для теста
 
     const loader = new THREE.TextureLoader();
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
@@ -84,15 +85,18 @@ function init() {
 
 function spawn3DMonster(x, z) {
     const gltfLoader = new GLTFLoader();
-    // ИСПРАВЛЕННЫЙ ПУТЬ СОГЛАСНО ТВОИМ ДАННЫМ
     const modelPath = path + 'assets/sprites/models/monster.glb';
     
     gltfLoader.load(modelPath, (gltf) => {
         const model = gltf.scene;
-        model.position.set(x, 0, z);
         
-        // Правка №28: Авто-масштабирование (если модель очень маленькая)
-        model.scale.set(1.5, 1.5, 1.5); 
+        // ПРАВКА №29: Авто-выравнивание и гигантский масштаб для поиска
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const scaleFactor = 2 / Math.max(size.x, size.y, size.z);
+        
+        model.scale.set(scaleFactor, scaleFactor, scaleFactor);
+        model.position.set(x, 0.1, z); // Чуть выше пола
         
         scene.add(model);
 
@@ -104,9 +108,9 @@ function spawn3DMonster(x, z) {
 
         model.userData = { health: 60, speed: 0.02 };
         monsters.push(model);
-        console.log("Монстр найден и загружен из assets/sprites/models/");
+        console.log("Монстр визуализирован!");
     }, undefined, (err) => {
-        console.error("ОШИБКА: Файл все еще не найден! Проверь путь: " + modelPath);
+        console.error("Ошибка загрузки модели!");
     });
 }
 
@@ -243,7 +247,7 @@ function animate() {
             const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
             m.position.x += dirM.x * 0.02;
             m.position.z += dirM.z * 0.02;
-            m.lookAt(camera.position.x, 0, camera.position.z);
+            m.lookAt(camera.position.x, m.position.y, camera.position.z);
         }
     });
 
