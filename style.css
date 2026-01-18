@@ -1,32 +1,61 @@
-/* Контейнер для оружия — центрирует всё по нижней кромке */
-#weapon-container {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    justify-content: center; /* Центр по горизонтали */
-    align-items: flex-end;   /* Прижать к низу */
-    pointer-events: none;    /* Чтобы не мешал кликать по монстрам */
-    z-index: 200;            /* Выше всех игровых объектов */
-    overflow: hidden;
+body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', monospace; }
+
+/* Экраны */
+#start-screen, #death-screen {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: radial-gradient(circle, #1a0000 0%, #000 100%);
+    display: flex; justify-content: center; align-items: center; z-index: 1000;
 }
 
-/* Само изображение пистолета */
+#death-screen { background: rgba(30, 0, 0, 0.95); z-index: 1100; }
+
+.neon-border {
+    padding: 60px;
+    border: 4px solid #f00;
+    text-align: center;
+    box-shadow: 0 0 20px #600, inset 0 0 20px #600;
+    animation: pulse 2s infinite, flicker 0.15s infinite;
+}
+
+.horror-title {
+    color: #f00; font-size: 50px; letter-spacing: 5px; margin: 0 0 30px 0;
+    text-shadow: 0 0 10px #f00, 0 0 20px #800;
+}
+
+#play-btn, .death-box button {
+    background: transparent; border: 2px solid #f00; color: #f00;
+    padding: 15px 40px; font-size: 20px; cursor: pointer;
+    box-shadow: 0 0 10px #600; transition: 0.3s;
+}
+
+#play-btn:hover { background: #f00; color: #000; }
+
+/* Оружие (Исправлено позиционирование) */
+#weapon-container {
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 100%;
+    display: flex; justify-content: center; align-items: flex-end;
+    pointer-events: none; z-index: 200; overflow: hidden;
+}
+
 #weapon {
-    width: 500px;  /* Подбери размер под свою картинку */
-    height: 500px;
+    width: 600px; height: 500px;
     background-image: url('assets/sprites/pistol.png');
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: bottom center;
-    transition: transform 0.1s ease-out; /* Плавный возврат после выстрела */
+    background-size: contain; background-repeat: no-repeat; background-position: bottom center;
     transform-origin: bottom center;
 }
 
-/* Анимация перезарядки (уход вниз) */
 .reloading {
     transform: translateY(100%) rotate(15deg) !important;
     transition: transform 0.6s ease-in-out !important;
 }
+
+/* Интерфейс */
+#hud { position: absolute; bottom: 0; width: 100%; height: 80px; background: rgba(0,0,0,0.8); display: flex; justify-content: space-around; align-items: center; color: #f00; z-index: 100; }
+.hp-bar-bg { width: 200px; height: 15px; background: #200; border: 1px solid #f00; }
+#hp-bar-fill { width: 100%; height: 100%; background: #f00; transition: width 0.2s; }
+#kill-counter { position: absolute; top: 20px; right: 20px; color: #f00; font-size: 24px; z-index: 100; }
+#damage-flash { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,0,0,0.3); display: none; z-index: 150; }
+#stats-text { color: #fff; font-size: 20px; margin-bottom: 20px; }
+
+@keyframes pulse { 0% { box-shadow: 0 0 20px #600; } 50% { box-shadow: 0 0 50px #f00; } 100% { box-shadow: 0 0 20px #600; } }
+@keyframes flicker { 0%, 100% { opacity: 1; } 92% { opacity: 1; } 93% { opacity: 0.6; } 94% { opacity: 1; } 96% { opacity: 0.4; } 97% { opacity: 1; } }
