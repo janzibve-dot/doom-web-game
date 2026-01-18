@@ -3,6 +3,7 @@ body {
     overflow: hidden; 
     background-color: #000; 
     font-family: 'Courier New', Courier, monospace; 
+    cursor: none; /* Скрываем стандартный курсор Windows */
 }
 
 #hud {
@@ -12,19 +13,20 @@ body {
     color: #ff0000; font-size: 24px; font-weight: bold; z-index: 100;
 }
 
-.label { font-size: 12px; color: #666; display: block; }
-
-/* Маленький точный прицел */
+/* Свободный прицел */
 #crosshair {
-    position: absolute; top: 50%; left: 50%;
-    width: 5px; height: 5px;
+    position: absolute; 
+    top: 50%; left: 50%;
+    width: 6px; height: 6px;
     border: 1px solid lime;
     border-radius: 50%; 
-    transform: translate(-50%, -50%);
-    pointer-events: none; z-index: 50;
+    pointer-events: none; 
+    z-index: 50;
+    /* Убираем старый transform, так как будем управлять через JS */
+    margin-left: -3px;
+    margin-top: -3px;
 }
 
-/* Контейнер для оружия */
 #weapon-container {
     position: absolute; 
     bottom: 0; 
@@ -39,18 +41,12 @@ body {
 }
 
 #weapon {
-    /* УВЕЛИЧЕННЫЙ РАЗМЕР */
     width: 600px; 
     height: 600px;
     background-image: url('assets/sprites/pistol.png');
     background-size: contain;
     background-repeat: no-repeat;
     background-position: bottom center;
-    transition: transform 0.05s ease-out;
     transform-origin: bottom center;
-}
-
-#damage-flash {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(255, 0, 0, 0.4); display: none; pointer-events: none; z-index: 150;
+    /* Убираем transition для мгновенного следования за прицелом */
 }
