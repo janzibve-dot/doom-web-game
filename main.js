@@ -77,16 +77,23 @@ function init() {
     });
     window.addEventListener('mousedown', () => { if (document.pointerLockElement) shoot(); });
 
-    for(let i=0; i<15; i++) { spawnNewMonster(); }
+    // ПРАВКА №43: Создаем 15 монстров сразу
+    spawnWave(15);
     animate();
+}
+
+function spawnWave(count) {
+    for (let i = 0; i < count; i++) {
+        spawnNewMonster();
+    }
 }
 
 function findSafeSpawn() {
     let attempts = 0;
-    while (attempts < 200) {
+    while (attempts < 300) {
         let x = Math.floor(Math.random() * levelData.map[0].length);
         let z = Math.floor(Math.random() * levelData.map.length);
-        if (levelData.map[z][x] === 0 && Math.abs(x - camera.position.x) > 6) {
+        if (levelData.map[z][x] === 0 && Math.abs(x - camera.position.x) > 8) {
             return { x: x + 0.5, z: z + 0.5 };
         }
         attempts++;
@@ -108,10 +115,22 @@ function spawnNewMonster() {
         let mixer = null;
         if (gltf.animations.length > 0) {
             mixer = new THREE.AnimationMixer(model);
-            mixer.clipAction(gltf.animations[0]).play();
+            const clip = gltf.animations[0];
+            
+            // ПРАВКА №44: Обрезка последних 5 секунд анимации падения
+            const action = mixer.clipAction(clip);
+            const duration = clip.duration > 5 ? clip.duration - 5 : clip.duration;
+            action.setDuration(duration); // Принудительно ускоряем/обрезаем цикл
+            action.play();
             mixers.push(mixer);
         }
-        model.userData = { health: 100, speed: 0.025, mixer: mixer };
+        
+        // ПРАВКА №42: Увеличена скорость монстров
+        model.userData = { 
+            health: 100, 
+            speed: 0.04 + Math.random() * 0.02, 
+            mixer: mixer 
+        };
         monsters.push(model);
     });
 }
@@ -138,6 +157,7 @@ function shoot() {
                 monsters = monsters.filter(m => m !== target);
                 kills++;
                 document.getElementById('kill-counter').innerText = "УБИТО: " + kills;
+                // Сразу спавним нового взамен убитого
                 spawnNewMonster();
             }
         }
@@ -146,6 +166,8 @@ function shoot() {
     weapon.style.transform = `translateY(${pitch * 25 + 60}px) scale(1.1)`;
     setTimeout(() => { weapon.style.transform = `translateY(${pitch * 25}px)`; isShooting = false; if (pistolMag === 0) reloadPistol(); }, 100);
 }
+
+// ... Остальные функции (reloadPistol, setupBackgroundMusic, drawMinimap и т.д.) без изменений ...
 
 function reloadPistol() {
     if (isReloading || pistolMag === 10 || pistolTotal <= 0) return;
@@ -236,23 +258,16 @@ function animate() {
     monsters.forEach(m => {
         const dist = m.position.distanceTo(camera.position);
         if (dist < 15) {
-            // ПРАВКА №41: Умное движение по коридорам
+            // ПРАВКА №42: Умная навигация и повышенная скорость
             const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
-            
-            // Пробуем идти прямо на игрока
             let moveX = dirM.x * m.userData.speed;
             let moveZ = dirM.z * m.userData.speed;
 
-            // Проверка коллизий по осям раздельно, чтобы монстр мог "скользить" вдоль стены
-            if (physics && !physics.checkCollision(m.position.x + moveX + Math.sign(moveX)*0.3, m.position.z)) {
+            // Проверка коллизий для "плавного" обхода углов
+            if (physics && !physics.checkCollision(m.position.x + moveX + Math.sign(moveX)*0.4, m.position.z)) {
                 m.position.x += moveX;
-            } else if (physics && !physics.checkCollision(m.position.x, m.position.z + moveZ + Math.sign(moveZ)*0.3)) {
-                // Если по X нельзя, пробуем только по Z (движение вдоль стены)
-                m.position.z += moveZ;
             }
-            
-            // Если монстр застрял (не может идти прямо), пробуем только Z
-            if (physics && !physics.checkCollision(m.position.x, m.position.z + moveZ + Math.sign(moveZ)*0.3)) {
+            if (physics && !physics.checkCollision(m.position.x, m.position.z + moveZ + Math.sign(moveZ)*0.4)) {
                 m.position.z += moveZ;
             }
 
