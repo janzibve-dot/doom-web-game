@@ -14,19 +14,17 @@ body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courie
 
 .horror-title { color: #f00; font-size: 50px; letter-spacing: 5px; margin: 0 0 30px 0; text-shadow: 0 0 10px #f00; }
 
-#play-btn, .death-box button {
+#play-btn, #death-screen button {
     background: transparent; border: 2px solid #f00; color: #f00;
-    padding: 15px 40px; font-size: 20px; cursor: pointer; box-shadow: 0 0 10px #600;
+    padding: 15px 40px; font-size: 20px; cursor: pointer;
 }
 
-/* ПРИЦЕЛ */
 #crosshair {
     position: absolute; top: 50%; left: 50%; width: 10px; height: 10px;
     border: 2px solid #0f0; border-radius: 50%;
     transform: translate(-50%, -50%); pointer-events: none; z-index: 500;
 }
 
-/* ОРУЖИЕ */
 #weapon-container {
     position: absolute; bottom: 0; left: 0; width: 100%; height: 100%;
     display: flex; justify-content: center; align-items: flex-end;
@@ -34,7 +32,7 @@ body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courie
 }
 
 #weapon {
-    width: 600px; height: 500px;
+    width: 500px; height: 450px;
     background-image: url('assets/sprites/pistol.png');
     background-size: contain; background-repeat: no-repeat; background-position: bottom center;
     transform-origin: bottom center;
@@ -42,7 +40,6 @@ body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courie
 
 .reloading { transform: translateY(100%) rotate(15deg) !important; transition: transform 0.6s ease-in-out !important; }
 
-/* HUD */
 #hud { position: absolute; bottom: 0; width: 100%; height: 80px; background: rgba(0,0,0,0.8); display: flex; justify-content: space-around; align-items: center; color: #f00; z-index: 100; }
 .hp-bar-bg { width: 200px; height: 15px; background: #200; border: 1px solid #f00; }
 #hp-bar-fill { width: 100%; height: 100%; background: #f00; transition: width 0.2s; }
@@ -50,4 +47,4 @@ body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courie
 #damage-flash { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,0,0,0.3); display: none; z-index: 150; }
 
 @keyframes pulse { 0% { box-shadow: 0 0 20px #600; } 50% { box-shadow: 0 0 50px #f00; } 100% { box-shadow: 0 0 20px #600; } }
-@keyframes flicker { 0%, 100% { opacity: 1; } 93% { opacity: 0.6; } 95% { opacity: 0.4; } }
+@keyframes flicker { 0%, 100% { opacity: 1; } 93% { opacity: 0.7; } 95% { opacity: 0.4; } }
