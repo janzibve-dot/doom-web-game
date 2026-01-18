@@ -14,7 +14,6 @@ const audioLoader = new THREE.AudioLoader();
 const listener = new THREE.AudioListener();
 const path = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
 
-// Ждем полной загрузки DOM, прежде чем искать кнопку
 window.addEventListener('DOMContentLoaded', () => {
     fetch(path + 'levels/level1.json')
         .then(r => r.json())
@@ -28,7 +27,7 @@ window.addEventListener('DOMContentLoaded', () => {
 function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000); 
-    scene.fog = new THREE.Fog(0x000000, 1, 9); 
+    scene.fog = new THREE.Fog(0x000000, 1, 10); 
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
     camera.position.set(2, 1.6, 2);
@@ -68,15 +67,9 @@ function init() {
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
-    // ПРИВЯЗКА КНОПКИ
     const startBtn = document.getElementById('play-btn');
-    if(startBtn) {
-        startBtn.onclick = () => {
-            if(!isGameStarted) startGame();
-        };
-    }
+    if(startBtn) startBtn.onclick = () => { if(!isGameStarted) startGame(); };
 
-    // УПРАВЛЕНИЕ
     window.onkeydown = (e) => { if(isGameStarted && !isDead && e.code in keys) keys[e.code] = true; };
     window.onkeyup = (e) => { if(isGameStarted && !isDead && e.code in keys) keys[e.code] = false; };
     window.onmousemove = (e) => {
@@ -101,8 +94,6 @@ function startGame() {
     document.body.requestPointerLock();
     if (listener.context.state === 'suspended') listener.context.resume();
     if (bgMusicHTML) bgMusicHTML.play().catch(() => {});
-    
-    // Интервал спавна 15 монстров
     setInterval(() => { if (monsters.length < 15 && !isDead) spawnRandomMonster(); }, 5000);
 }
 
@@ -117,7 +108,8 @@ function spawnRandomMonster() {
     gltfLoader.load(path + 'assets/sprites/models/monster.glb', (gltf) => {
         const model = gltf.scene;
         model.position.set(rx, 0, rz);
-        model.scale.set(1.5, 1.5, 1.5);
+        // ПРАВКА РАЗМЕРА: увеличен до 1.8
+        model.scale.set(1.8, 1.8, 1.8);
         scene.add(model);
         if (gltf.animations.length > 0) {
             const mixer = new THREE.AnimationMixer(model);
@@ -161,7 +153,8 @@ function animate() {
 
     let collision = false;
     if (physics && physics.checkCollision(camera.position.x, camera.position.z)) collision = true;
-    monsters.forEach(m => { if(camera.position.distanceTo(m.position) < 0.9) collision = true; });
+    // ПРАВКА ФИЗИКИ: дистанция коллизии с монстром увеличена до 1.2
+    monsters.forEach(m => { if(camera.position.distanceTo(m.position) < 1.2) collision = true; });
     if (collision) camera.position.copy(oldP);
 
     playerLight.position.copy(camera.position);
@@ -235,7 +228,6 @@ function shoot() {
                 scene.remove(obj);
                 monsters = monsters.filter(m => m !== obj);
                 kills++; document.getElementById('kill-counter').innerText = "УБИТО: " + kills;
-                spawnRandomMonster();
             }
         }
     }
