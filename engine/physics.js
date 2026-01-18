@@ -2,22 +2,11 @@ export class Physics {
     constructor(mapData) {
         this.map = mapData.map;
     }
-
-    canMove(x, z) {
+    // Проверка столкновений со стенами
+    checkCollision(x, z) {
         const gridX = Math.round(x);
         const gridZ = Math.round(z);
-
-        // Проверка границ массива
-        if (this.map[gridZ] === undefined || this.map[gridZ][gridX] === undefined) {
-            return false;
-        }
-
-        // Нельзя ходить сквозь 1 (стены) и 2 (колонны)
-        const cell = this.map[gridZ][gridX];
-        if (cell === 1 || cell === 2) {
-            return false;
-        }
-
-        return true;
+        if (!this.map[gridZ] || this.map[gridZ][gridX] === undefined) return true;
+        return this.map[gridZ][gridX] === 1;
     }
 }
