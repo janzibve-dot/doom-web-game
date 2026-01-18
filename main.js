@@ -20,7 +20,7 @@ window.addEventListener('DOMContentLoaded', () => {
         levelData = data; 
         physics = new Physics(levelData);
         init(); 
-    }).catch(e => console.error("Карта не загружена:", e));
+    }).catch(e => console.error("Ошибка загрузки данных уровня:", e));
 });
 
 function init() {
@@ -28,7 +28,7 @@ function init() {
     scene.background = new THREE.Color(0x000000); 
     scene.fog = new THREE.Fog(0x000000, 0.1, 12); 
 
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 300);
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500);
     camera.position.set(2, 1.6, 2);
     camera.rotation.order = 'YXZ'; 
     camera.add(listener);
@@ -48,7 +48,7 @@ function init() {
     scene.add(playerLight);
     scene.add(playerLight.target);
 
-    // Оптимизация: Сборка лабиринта
+    // Сборка оптимизированного мира
     const wallGeoms = [], floorGeoms = [], ceilGeoms = [];
     const wallBox = new THREE.BoxGeometry(1, 4, 1);
     const tileBox = new THREE.BoxGeometry(1, 0.1, 1);
@@ -109,7 +109,9 @@ function spawnRandomMonster() {
     new GLTFLoader().load(path + 'assets/sprites/models/monster.glb', (gltf) => {
         const model = gltf.scene;
         model.position.set(rx, 0, rz);
-        model.scale.set(1.3, 1.3, 1.3);
+        // МОНСТР ТЕПЕРЬ РОСТОМ С ИГРОКА (Масштаб 1.0)
+        model.scale.set(1.0, 1.0, 1.0);
+        
         scene.add(model);
         if (gltf.animations.length > 0) {
             const mixer = new THREE.AnimationMixer(model);
@@ -145,7 +147,8 @@ function animate() {
     if (keys.KeyD) camera.position.addScaledVector(sideDir, -s);
 
     if (physics && physics.checkCollision(camera.position.x, camera.position.z)) camera.position.copy(oldP);
-    monsters.forEach(m => { if(camera.position.distanceTo(m.position) < 0.8) camera.position.copy(oldP); });
+    // Коллизия с монстром уменьшена под новый масштаб
+    monsters.forEach(m => { if(camera.position.distanceTo(m.position) < 0.75) camera.position.copy(oldP); });
 
     playerLight.position.copy(camera.position);
     const targetPos = new THREE.Vector3(); camera.getWorldDirection(targetPos);
@@ -159,11 +162,11 @@ function animate() {
         if (dist < minMonsterDist) minMonsterDist = dist;
         if (dist < 12) { 
             const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
-            if (physics && !physics.checkCollision(m.position.x + dirM.x * 0.4, m.position.z + dirM.z * 0.4)) {
+            if (physics && !physics.checkCollision(m.position.x + dirM.x*0.4, m.position.z + dirM.z*0.4)) {
                 m.position.x += dirM.x * m.userData.speed; m.position.z += dirM.z * m.userData.speed;
             }
             m.lookAt(camera.position.x, 0, camera.position.z);
-            if (dist < 1.4 && now - lastDamageTime > 1200) {
+            if (dist < 1.3 && now - lastDamageTime > 1200) {
                 playerHP -= 20;
                 document.getElementById('hp-bar-fill').style.width = playerHP + "%";
                 document.getElementById('hp-text').innerText = playerHP + "%";
