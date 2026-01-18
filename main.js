@@ -2,8 +2,7 @@ import * as THREE from 'three';
 import { Physics } from './engine/physics.js';
 
 let scene, camera, renderer, physics, playerLight;
-let levelData;
-let playerHP = 100, pistolMag = 10, pistolTotal = 120;
+let levelData, playerHP = 100, pistolMag = 10, pistolTotal = 120;
 let isReloading = false, isShooting = false, lastDamageTime = 0;
 let monsters = [];
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false, KeyR: false };
@@ -28,7 +27,7 @@ function init() {
     scene.background = new THREE.Color(0x010101);
     scene.fog = new THREE.Fog(0x000000, 1, 15);
 
-    // Правка №4: Решение проблемы прозрачности
+    // Правка №4: Фикс прозрачности
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
     camera.position.set(2, 1.6, 2);
     camera.rotation.order = 'YXZ'; 
@@ -41,28 +40,26 @@ function init() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // Правка №5: Корректный свет
-    playerLight = new THREE.PointLight(0xffffff, 1.5, 12);
+    // Правка №5: Позиция света
+    playerLight = new THREE.PointLight(0xffffff, 1.3, 12);
     playerLight.decay = 2;
     scene.add(playerLight);
-    scene.add(new THREE.AmbientLight(0x222222, 0.2));
+    scene.add(new THREE.AmbientLight(0x222222, 0.15));
 
     const canvas = document.createElement('canvas');
     canvas.width = 128; canvas.height = 128;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#111'; ctx.fillRect(0,0,128,128);
-    ctx.strokeStyle = '#333'; ctx.lineWidth = 4; ctx.strokeRect(0,0,128,128);
+    ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0,0,128,128);
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 4; ctx.strokeRect(0,0,128,128);
     const wallTexture = new THREE.CanvasTexture(canvas);
     wallTexture.wrapS = wallTexture.wrapT = THREE.RepeatWrapping;
     wallTexture.repeat.set(1, 2);
 
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTexture });
-    const wallGeo = new THREE.BoxGeometry(1, 4, 1);
-
     levelData.map.forEach((row, z) => {
         row.forEach((cell, x) => {
             if (cell === 1) {
-                const wall = new THREE.Mesh(wallGeo, wallMat);
+                const wall = new THREE.Mesh(new THREE.BoxGeometry(1, 4, 1), wallMat);
                 wall.position.set(x, 2, z);
                 scene.add(wall);
             }
@@ -93,10 +90,10 @@ function init() {
 }
 
 function setupBackgroundMusic() {
-    // Правка №3: Использование .ogg формата
-    bgMusicHTML = new Audio(path + 'audio/music/FON1.ogg');
+    // Правка №3: Путь к файлу в корне репозитория
+    bgMusicHTML = new Audio(path + 'FON1.ogg');
     bgMusicHTML.loop = true;
-    bgMusicHTML.volume = 0.3;
+    bgMusicHTML.volume = 0.35;
 }
 
 function loadSFX() {
@@ -110,7 +107,7 @@ function startGame() {
     document.getElementById('start-screen').style.display = 'none';
     document.body.requestPointerLock();
     if (listener.context.state === 'suspended') listener.context.resume();
-    bgMusicHTML.play().catch(() => console.log("Файл FON1.ogg не найден"));
+    bgMusicHTML.play().catch(e => console.log("Файл FON1.ogg не найден в корне"));
 }
 
 function spawnMonster(x, z) {
@@ -194,8 +191,9 @@ function animate() {
         camera.position.copy(oldP);
     }
 
+    // Правка №5: Свет
     playerLight.position.copy(camera.position);
-    playerLight.position.y += 0.5;
+    playerLight.position.y += 0.6; 
 
     const now = Date.now();
     monsters.forEach(m => {
@@ -204,7 +202,7 @@ function animate() {
             const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
             m.position.x += dirM.x * m.userData.speed;
             m.position.z += dirM.z * m.userData.speed;
-            if (dist < 1.2 && now - lastDamageTime > 1200) {
+            if (dist < 1.3 && now - lastDamageTime > 1200) {
                 playerHP -= 20;
                 document.getElementById('hp-bar-fill').style.width = playerHP + "%";
                 document.getElementById('hp-text').innerText = playerHP + "%";
