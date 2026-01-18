@@ -19,9 +19,8 @@ fetch(path + 'levels/level1.json').then(r => r.json()).then(data => {
 
 function init() {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x000000); // Глубокий черный
-    // ПРАВКА №57: Густой туман (начало с 1м, полная тьма на 8м)
-    scene.fog = new THREE.Fog(0x000000, 1, 8); 
+    scene.background = new THREE.Color(0x000000); 
+    scene.fog = new THREE.Fog(0x000000, 1, 8); // Туман: полная тьма на 8 метрах
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
     camera.position.set(1.5, 1.6, 1.5);
@@ -31,17 +30,17 @@ function init() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // ПРАВКА: Фонарик (SpotLight для эффекта луча)
-    playerLight = new THREE.SpotLight(0xffffff, 5, 15, Math.PI/4, 0.5);
+    // Фонарик (SpotLight)
+    playerLight = new THREE.SpotLight(0xffffff, 4, 15, Math.PI/4, 0.5);
     playerLight.decay = 2;
     scene.add(playerLight);
-    scene.add(playerLight.target); // Цель для направления луча
+    scene.add(playerLight.target);
 
     const loader = new THREE.TextureLoader();
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
 
-    // Отрисовка большой карты 80x80
+    // Отрисовка огромной карты 80x80
     levelData.map.forEach((row, z) => {
         row.forEach((cell, x) => {
             if (cell === 1) {
@@ -74,18 +73,20 @@ function init() {
     });
     window.addEventListener('mousedown', () => { if (document.pointerLockElement) shoot(); });
 
-    // Спавним 15 монстров хаотично в лабиринте
+    // Спавн монстров
     for(let i=0; i<15; i++) {
-        spawn3DMonster(Math.random()*70 + 5, Math.random()*70 + 5);
+        let rx, rz;
+        do {
+            rx = Math.floor(Math.random() * 70) + 5;
+            rz = Math.floor(Math.random() * 70) + 5;
+        } while (levelData.map[rz][rx] === 1);
+        spawn3DMonster(rx, rz);
     }
     
     animate();
 }
 
 function spawn3DMonster(x, z) {
-    // Проверка, чтобы не спавнить в стене
-    if (levelData.map[Math.floor(z)] && levelData.map[Math.floor(z)][Math.floor(x)] === 1) return;
-
     const gltfLoader = new GLTFLoader();
     gltfLoader.load(path + 'assets/sprites/models/monster.glb', (gltf) => {
         const model = gltf.scene;
@@ -96,11 +97,11 @@ function spawn3DMonster(x, z) {
         if (gltf.animations.length > 0) {
             const mixer = new THREE.AnimationMixer(model);
             const action = mixer.clipAction(gltf.animations[0]);
-            action.time = 3; // Обрезка по твоему запросу
+            action.time = 3; 
             action.play();
             mixers.push(mixer);
         }
-        model.userData = { health: 100, speed: 0.03 };
+        model.userData = { health: 100, speed: 0.04 };
         monsters.push(model);
     });
 }
@@ -109,6 +110,8 @@ function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
     mixers.forEach(m => m.update(delta));
+
+    let minMonsterDist = 15; // Для расчета мерцания
 
     if (document.pointerLockElement) {
         const oldP = camera.position.clone();
@@ -134,11 +137,12 @@ function animate() {
         playerLight.target.position.copy(camera.position).add(targetPos);
     }
 
-    // Логика монстров (преследование в темноте)
     const now = Date.now();
     monsters.forEach(m => {
         const dist = m.position.distanceTo(camera.position);
-        if (dist < 10) { // Видит тебя только если ты рядом
+        if (dist < minMonsterDist) minMonsterDist = dist;
+
+        if (dist < 10) { 
             const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
             if (physics && !physics.checkCollision(m.position.x + dirM.x*0.4, m.position.z + dirM.z*0.4)) {
                 m.position.x += dirM.x * m.userData.speed;
@@ -155,10 +159,22 @@ function animate() {
         }
     });
 
+    // ПРАВКА №58: Логика мерцания фонарика
+    if (minMonsterDist < 5) {
+        // Чем ближе монстр, тем выше шанс мерцания
+        if (Math.random() > (minMonsterDist / 5)) {
+            playerLight.intensity = Math.random() * 0.5;
+        } else {
+            playerLight.intensity = 4;
+        }
+    } else {
+        playerLight.intensity = 4;
+    }
+
     renderer.render(scene, camera);
 }
 
-// Функции shoot и reloadPistol остаются из предыдущего ответа
+// Функции стрельбы и перезарядки (исправленные ранее)
 function shoot() {
     if (isShooting || isReloading || pistolMag <= 0) return;
     isShooting = true;
@@ -201,18 +217,14 @@ function reloadPistol() {
     }, 1200); 
 }
 
-function setupBackgroundMusic() {
-    bgMusicHTML = new Audio(path + 'FON1.ogg');
-    bgMusicHTML.loop = true;
-    bgMusicHTML.volume = 0.15; 
-}
-
-function loadSFX() {
-    // Звуки подгрузятся по старым путям
-}
-
 function startGame() {
     document.getElementById('start-screen').style.display = 'none';
     document.body.requestPointerLock();
     bgMusicHTML.play();
+}
+
+function setupBackgroundMusic() {
+    bgMusicHTML = new Audio(path + 'FON1.ogg');
+    bgMusicHTML.loop = true;
+    bgMusicHTML.volume = 0.15; 
 }
