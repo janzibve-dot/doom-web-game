@@ -4,22 +4,22 @@ import { Physics } from './engine/physics.js';
 let scene, camera, renderer, physics, playerLight;
 let levelData;
 
-// Настройки игрока и оружия
-let pistolMag = 10;
-let pistolTotal = 120;
-let isReloading = false;
+// Настройки игрока
 let playerHP = 100;
+let pistolMag = 10, pistolTotal = 120;
+let isReloading = false, isShooting = false;
+let lastDamageTime = 0;
 
 // Монстры
 let monsters = [];
 
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false, KeyR: false };
 let pitch = 0;
-let isShooting = false;
 
 // Звуки
 let shotSound, reloadSound, bgMusic;
 const audioLoader = new THREE.AudioLoader();
+const listener = new THREE.AudioListener();
 
 fetch('./levels/level1.json')
     .then(r => r.json())
@@ -33,31 +33,26 @@ function init() {
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 1000);
     camera.position.set(2, 1.6, 2);
     camera.rotation.order = 'YXZ'; 
-
-    const listener = new THREE.AudioListener();
     camera.add(listener);
-    
-    // 1. Фоновая музыка (файл fon.mp3)
+
+    // Звуки
     bgMusic = new THREE.Audio(listener);
     audioLoader.load('audio/music/fon.mp3', (buffer) => {
         bgMusic.setBuffer(buffer);
         bgMusic.setLoop(true);
-        bgMusic.setVolume(0.15); 
-        bgMusic.play();
+        bgMusic.setVolume(0.15);
     });
 
-    // 2. Звук выстрела (ГРОМКО)
     shotSound = new THREE.Audio(listener);
     audioLoader.load('audio/sfx/shot.mp3', (buffer) => {
         shotSound.setBuffer(buffer);
-        shotSound.setVolume(0.9); 
+        shotSound.setVolume(0.8);
     });
 
-    // 3. Звук перезарядки
     reloadSound = new THREE.Audio(listener);
     audioLoader.load('audio/sfx/reload.mp3', (buffer) => {
         reloadSound.setBuffer(buffer);
-        reloadSound.setVolume(0.7);
+        reloadSound.setVolume(0.6);
     });
 
     renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -71,7 +66,7 @@ function init() {
     playerLight = new THREE.PointLight(0xffffff, 1.2, 15);
     scene.add(playerLight);
 
-    // Стены
+    // Генерация уровня
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
     const wallGeo = new THREE.BoxGeometry(1.05, 4, 1.05);
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
@@ -90,17 +85,19 @@ function init() {
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
+    // События
     window.addEventListener('keydown', e => { 
         if(e.code in keys) keys[e.code] = true; 
         if(e.code === 'KeyR') reloadPistol();
     });
     window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
     
-    window.addEventListener('mousedown', (e) => {
+    window.addEventListener('mousedown', () => {
         if (document.pointerLockElement) {
-            if (e.button === 0) shoot();
+            shoot();
         } else {
             document.body.requestPointerLock();
+            if (bgMusic.buffer && !bgMusic.isPlaying) bgMusic.play(); // Старт музыки после клика
         }
     });
 
@@ -114,9 +111,9 @@ function init() {
         }
     });
 
-    // Создаем несколько монстров
+    // Спавним монстров только спереди от игрока
     spawnMonster(5, 5);
-    spawnMonster(8, 10);
+    spawnMonster(2, 8);
 
     animate();
 }
@@ -128,44 +125,30 @@ function spawnMonster(x, z) {
     const monster = new THREE.Sprite(spriteMat);
     monster.position.set(x, 1, z);
     monster.scale.set(2, 2, 1);
-    // Данные ИИ монстра
-    monster.userData = { 
-        health: 50, 
-        speed: 0.02, 
-        range: 15 // Дистанция, с которой он начинает преследовать
-    };
+    monster.userData = { health: 50, speed: 0.015 };
     scene.add(monster);
     monsters.push(monster);
 }
 
-function updateWeaponPosition(offsetY = 0) {
+function updateWeaponPosition() {
     const weapon = document.getElementById('weapon');
     if (!isReloading) {
-        weapon.style.transform = `translateY(${pitch * 20 + offsetY}px)`;
+        weapon.style.transform = `translateY(${pitch * 20}px)`;
     }
 }
 
 function reloadPistol() {
     if (isReloading || pistolMag === 10 || pistolTotal <= 0) return;
     isReloading = true;
-    const weapon = document.getElementById('weapon');
-    if (reloadSound.buffer) {
-        if (reloadSound.isPlaying) reloadSound.stop();
-        reloadSound.play();
-    }
-    weapon.classList.add('reloading');
+    if (reloadSound.buffer) reloadSound.play();
+    document.getElementById('weapon').classList.add('reloading');
     setTimeout(() => {
-        let needed = 10 - pistolMag;
-        let toReload = Math.min(needed, pistolTotal);
-        pistolMag += toReload;
-        pistolTotal -= toReload;
+        let toReload = Math.min(10 - pistolMag, pistolTotal);
+        pistolMag += toReload; pistolTotal -= toReload;
         document.getElementById('mag').innerText = pistolMag;
         document.getElementById('total-ammo').innerText = pistolTotal;
-        weapon.classList.remove('reloading');
-        setTimeout(() => {
-            isReloading = false;
-            updateWeaponPosition();
-        }, 600);
+        document.getElementById('weapon').classList.remove('reloading');
+        setTimeout(() => { isReloading = false; updateWeaponPosition(); }, 600);
     }, 1400); 
 }
 
@@ -176,32 +159,24 @@ function shoot() {
     isShooting = true;
     pistolMag--;
     document.getElementById('mag').innerText = pistolMag;
-    if (shotSound.buffer) {
-        if (shotSound.isPlaying) shotSound.stop();
-        shotSound.play();
-    }
+    if (shotSound.buffer) { if (shotSound.isPlaying) shotSound.stop(); shotSound.play(); }
 
     const raycaster = new THREE.Raycaster();
-    const center = new THREE.Vector2(0, 0);
-    raycaster.setFromCamera(center, camera);
+    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
     const intersects = raycaster.intersectObjects(monsters);
 
     if (intersects.length > 0) {
-        let hitMonster = intersects[0].object;
-        hitMonster.userData.health -= 25;
-        if (hitMonster.userData.health <= 0) {
-            scene.remove(hitMonster);
-            monsters = monsters.filter(m => m !== hitMonster);
+        let m = intersects[0].object;
+        m.userData.health -= 25;
+        if (m.userData.health <= 0) {
+            scene.remove(m);
+            monsters = monsters.filter(mon => mon !== m);
         }
     }
 
     const weapon = document.getElementById('weapon');
-    playerLight.intensity = 15;
-    weapon.style.transition = "none";
     weapon.style.transform = `translateY(${pitch * 20 + 70}px) scale(1.1) rotate(-5deg)`;
-
     setTimeout(() => {
-        playerLight.intensity = 1.2;
         weapon.style.transition = "transform 0.1s ease-out";
         updateWeaponPosition();
         isShooting = false;
@@ -210,27 +185,24 @@ function shoot() {
 }
 
 function updateMonsters() {
-    monsters.forEach(monster => {
-        const dist = monster.position.distanceTo(camera.position);
+    const now = Date.now();
+    monsters.forEach(m => {
+        const dist = m.position.distanceTo(camera.position);
         
-        // Если игрок рядом, монстр идет к нему
-        if (dist < monster.userData.range) {
-            const dir = new THREE.Vector3();
-            dir.subVectors(camera.position, monster.position).normalize();
-            dir.y = 0; // Монстры не летают
-            
-            // Проверка коллизий для монстра (упрощенно)
-            const nextX = monster.position.x + dir.x * monster.userData.speed;
-            const nextZ = monster.position.z + dir.z * monster.userData.speed;
-            
+        // Монстр идет к игроку, только если игрок видит его (примерно)
+        const dirToPlayer = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
+        
+        if (dist < 15) {
+            const nextX = m.position.x + dirToPlayer.x * m.userData.speed;
+            const nextZ = m.position.z + dirToPlayer.z * m.userData.speed;
             if (!physics.checkCollision(nextX, nextZ)) {
-                monster.position.x = nextX;
-                monster.position.z = nextZ;
+                m.position.x = nextX; m.position.z = nextZ;
             }
-
-            // Если монстр коснулся игрока
-            if (dist < 0.8) {
-                takeDamage(0.5); // Урон игроку
+            
+            // Урон: только если монстр вплотную и прошла 1 секунда с прошлого удара
+            if (dist < 1.2 && now - lastDamageTime > 1000) {
+                takeDamage(20); // Кусает на 20%
+                lastDamageTime = now;
             }
         }
     });
@@ -238,10 +210,15 @@ function updateMonsters() {
 
 function takeDamage(amount) {
     playerHP -= amount;
-    document.getElementById('hp').innerText = Math.ceil(playerHP);
+    if (playerHP < 0) playerHP = 0;
+    
+    // Обновление HUD
+    document.getElementById('hp-bar-fill').style.width = playerHP + "%";
+    document.getElementById('hp-text').innerText = Math.ceil(playerHP) + "%";
+    
     const flash = document.getElementById('damage-flash');
     flash.style.display = 'block';
-    setTimeout(() => flash.style.display = 'none', 50);
+    setTimeout(() => flash.style.display = 'none', 100);
     
     if (playerHP <= 0) {
         alert("ВЫ ПОГИБЛИ");
@@ -251,26 +228,21 @@ function takeDamage(amount) {
 
 function animate() {
     requestAnimationFrame(animate);
-
-    let speed = keys.ShiftLeft ? 0.12 : 0.05;
     const dir = new THREE.Vector3();
-    camera.getWorldDirection(dir); 
-    const moveDir = dir.clone();
-    moveDir.y = 0; moveDir.normalize();
+    camera.getWorldDirection(dir);
+    const moveDir = dir.clone().setY(0).normalize();
     const side = new THREE.Vector3().crossVectors(camera.up, moveDir).normalize();
     const oldP = camera.position.clone();
+    let s = keys.ShiftLeft ? 0.12 : 0.05;
 
-    if (keys.KeyW) camera.position.addScaledVector(moveDir, speed);
-    if (keys.KeyS) camera.position.addScaledVector(moveDir, -speed);
-    if (keys.KeyA) camera.position.addScaledVector(side, speed);
-    if (keys.KeyD) camera.position.addScaledVector(side, -speed);
+    if (keys.KeyW) camera.position.addScaledVector(moveDir, s);
+    if (keys.KeyS) camera.position.addScaledVector(moveDir, -s);
+    if (keys.KeyA) camera.position.addScaledVector(side, s);
+    if (keys.KeyD) camera.position.addScaledVector(side, -s);
 
-    if (physics.checkCollision(camera.position.x, camera.position.z)) {
-        camera.position.copy(oldP);
-    }
+    if (physics.checkCollision(camera.position.x, camera.position.z)) camera.position.copy(oldP);
 
-    updateMonsters(); // Обновляем логику ИИ
-
+    updateMonsters();
     playerLight.position.copy(camera.position);
     renderer.render(scene, camera);
 }
