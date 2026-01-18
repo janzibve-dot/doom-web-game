@@ -77,24 +77,21 @@ function init() {
     });
     window.addEventListener('mousedown', () => { if (document.pointerLockElement) shoot(); });
 
-    // ПРАВКА №38: Создаем 15 монстров изначально
     for(let i=0; i<15; i++) { spawnNewMonster(); }
     animate();
 }
 
-// ПРАВКА №38: Безопасный поиск точки спавна
 function findSafeSpawn() {
     let attempts = 0;
     while (attempts < 200) {
         let x = Math.floor(Math.random() * levelData.map[0].length);
         let z = Math.floor(Math.random() * levelData.map.length);
-        // Центрируем монстра в клетке (+0.5), чтобы он не касался краев стен
         if (levelData.map[z][x] === 0 && Math.abs(x - camera.position.x) > 6) {
             return { x: x + 0.5, z: z + 0.5 };
         }
         attempts++;
     }
-    return { x: 2, z: 2 }; // Запасной вариант
+    return { x: 2, z: 2 };
 }
 
 function spawnNewMonster() {
@@ -114,7 +111,7 @@ function spawnNewMonster() {
             mixer.clipAction(gltf.animations[0]).play();
             mixers.push(mixer);
         }
-        model.userData = { health: 100, speed: 0.02, mixer: mixer };
+        model.userData = { health: 100, speed: 0.025, mixer: mixer };
         monsters.push(model);
     });
 }
@@ -136,15 +133,12 @@ function shoot() {
         if (target.userData.health) {
             target.userData.health -= 7;
             if (target.userData.health <= 0) {
-                // ПРАВКА №39: Удаляем старого и сразу спавним нового
                 scene.remove(target);
-                if (target.userData.mixer) {
-                    mixers = mixers.filter(m => m !== target.userData.mixer);
-                }
+                if (target.userData.mixer) { mixers = mixers.filter(m => m !== target.userData.mixer); }
                 monsters = monsters.filter(m => m !== target);
                 kills++;
                 document.getElementById('kill-counter').innerText = "УБИТО: " + kills;
-                spawnNewMonster(); // Появляется новый монстр в другом месте
+                spawnNewMonster();
             }
         }
     }
@@ -153,7 +147,6 @@ function shoot() {
     setTimeout(() => { weapon.style.transform = `translateY(${pitch * 25}px)`; isShooting = false; if (pistolMag === 0) reloadPistol(); }, 100);
 }
 
-// Функции reloadPistol, setupBackgroundMusic, loadSFX, startGame, drawMinimap остаются прежними
 function reloadPistol() {
     if (isReloading || pistolMag === 10 || pistolTotal <= 0) return;
     isReloading = true;
@@ -242,24 +235,29 @@ function animate() {
     const now = Date.now();
     monsters.forEach(m => {
         const dist = m.position.distanceTo(camera.position);
-        if (dist < 12) {
+        if (dist < 15) {
+            // ПРАВКА №41: Умное движение по коридорам
             const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
             
-            // ПРАВКА №40: Умная проверка стен для монстра с запасом
-            const step = m.userData.speed;
-            const nextX = m.position.x + dirM.x * step;
-            const nextZ = m.position.z + dirM.z * step;
-            
-            // Проверяем коллизию не только в точке, но и чуть впереди (0.4м)
-            const feelX = m.position.x + dirM.x * 0.4;
-            const feelZ = m.position.z + dirM.z * 0.4;
+            // Пробуем идти прямо на игрока
+            let moveX = dirM.x * m.userData.speed;
+            let moveZ = dirM.z * m.userData.speed;
 
-            if (physics && !physics.checkCollision(feelX, feelZ)) {
-                m.position.x = nextX;
-                m.position.z = nextZ;
+            // Проверка коллизий по осям раздельно, чтобы монстр мог "скользить" вдоль стены
+            if (physics && !physics.checkCollision(m.position.x + moveX + Math.sign(moveX)*0.3, m.position.z)) {
+                m.position.x += moveX;
+            } else if (physics && !physics.checkCollision(m.position.x, m.position.z + moveZ + Math.sign(moveZ)*0.3)) {
+                // Если по X нельзя, пробуем только по Z (движение вдоль стены)
+                m.position.z += moveZ;
             }
             
+            // Если монстр застрял (не может идти прямо), пробуем только Z
+            if (physics && !physics.checkCollision(m.position.x, m.position.z + moveZ + Math.sign(moveZ)*0.3)) {
+                m.position.z += moveZ;
+            }
+
             m.lookAt(camera.position.x, 0, camera.position.z);
+
             if (dist < 1.3 && now - lastDamageTime > 1000) {
                 playerHP -= 15;
                 document.getElementById('hp-bar-fill').style.width = playerHP + "%";
