@@ -5,14 +5,13 @@ import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders
 let scene, camera, renderer, physics, playerLight;
 let levelData, playerHP = 100, pistolMag = 10, pistolTotal = 120;
 let isReloading = false, isShooting = false, lastDamageTime = 0;
-let monsters = [];
+let monsters = [], mixers = [], clock = new THREE.Clock();
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false, KeyR: false };
-let pitch = 0, mixers = [], clock = new THREE.Clock();
+let pitch = 0;
 
 let shotSound, reloadSound, bgMusicHTML;
 const audioLoader = new THREE.AudioLoader();
 const listener = new THREE.AudioListener();
-
 const path = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
 
 fetch(path + 'levels/level1.json').then(r => r.json()).then(data => { 
@@ -27,7 +26,7 @@ function init() {
     scene.fog = new THREE.Fog(0x000000, 1, 15);
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
-    camera.position.set(2, 1.6, 2);
+    camera.position.set(1.5, 1.6, 1.5); // Старт в начале лабиринта
     camera.rotation.order = 'YXZ'; 
     camera.add(listener);
 
@@ -38,10 +37,11 @@ function init() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    playerLight = new THREE.PointLight(0xffffff, 1.3, 12);
+    playerLight = new THREE.PointLight(0xffffff, 1.5, 12);
     scene.add(playerLight);
-    scene.add(new THREE.AmbientLight(0x404040, 0.2));
+    scene.add(new THREE.AmbientLight(0x404040, 0.1));
 
+    // Стены лабиринта
     const loader = new THREE.TextureLoader();
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
     wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping;
@@ -57,8 +57,8 @@ function init() {
         });
     });
 
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), floorMat);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), floorMat);
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
@@ -79,8 +79,7 @@ function init() {
     });
     window.addEventListener('mousedown', () => { if (document.pointerLockElement) shoot(); });
 
-    // Спавним монстра сразу
-    spawn3DMonster(5, 5);
+    spawn3DMonster(7, 7);
     animate();
 }
 
@@ -97,22 +96,23 @@ function spawn3DMonster(x, z) {
             const clip = gltf.animations[0];
             const action = mixer.clipAction(clip);
             
-            // ПРАВКА: Обрезаем первые 3 и последние 3 секунды
+            // ПРАВКА: Обрезаем 3 сек с начала и конца
             const startTime = 3;
             const endTime = clip.duration - 3;
             
             if (endTime > startTime) {
                 action.time = startTime;
                 action.play();
-                // Ограничиваем цикл воспроизведения
-                mixer.addEventListener('loop', () => { action.time = startTime; });
+                // Зацикливаем внутри обрезанного диапазона
+                setInterval(() => {
+                    if (action.time >= endTime) action.time = startTime;
+                }, 100);
             } else {
-                action.play(); // Если анимация слишком короткая, играем как есть
+                action.play();
             }
             mixers.push(mixer);
         }
-
-        model.userData = { health: 60, speed: 0.02 };
+        model.userData = { health: 100, speed: 0.02 };
         monsters.push(model);
     });
 }
@@ -127,27 +127,20 @@ function shoot() {
 
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-    
-    // ПРАВКА: Глубокая проверка попадания в монстров
     const intersects = raycaster.intersectObjects(monsters, true);
+    
     if (intersects.length > 0) {
-        let hitObject = intersects[0].object;
-        // Ищем родителя, у которого есть userData.health
-        let target = hitObject;
-        while (target && !target.userData.health) {
-            target = target.parent;
-        }
-
-        if (target && target.userData.health) {
-            target.userData.health -= 20;
-            if (target.userData.health <= 0) {
-                scene.remove(target);
-                monsters = monsters.filter(m => m !== target);
+        let obj = intersects[0].object;
+        while (obj && !obj.userData.health) obj = obj.parent;
+        if (obj && obj.userData.health) {
+            obj.userData.health -= 25;
+            if (obj.userData.health <= 0) {
+                scene.remove(obj);
+                monsters = monsters.filter(m => m !== obj);
             }
         }
     }
 
-    // Визуальная отдача
     const weapon = document.getElementById('weapon');
     weapon.style.transform = `translateY(${pitch * 25 + 60}px) scale(1.1)`;
     setTimeout(() => {
@@ -160,26 +153,20 @@ function shoot() {
 function reloadPistol() {
     if (isReloading || pistolMag === 10 || pistolTotal <= 0) return;
     isReloading = true;
-    
     if (reloadSound.buffer) reloadSound.play();
     document.getElementById('weapon').classList.add('reloading');
-
     setTimeout(() => {
         let needed = 10 - pistolMag;
         let toReload = Math.min(needed, pistolTotal);
         pistolMag += toReload;
         pistolTotal -= toReload;
-        
         document.getElementById('mag').innerText = pistolMag;
         document.getElementById('total-ammo').innerText = pistolTotal;
         document.getElementById('weapon').classList.remove('reloading');
-        
-        // Гарантированный сброс флага
         isReloading = false;
     }, 1200); 
 }
 
-// Остальные функции (animate, setupBackgroundMusic и т.д.) остаются прежними
 function setupBackgroundMusic() {
     bgMusicHTML = new Audio(path + 'FON1.ogg');
     bgMusicHTML.loop = true;
@@ -230,8 +217,13 @@ function animate() {
         const dist = m.position.distanceTo(camera.position);
         if (dist < 15) {
             const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
-            m.position.x += dirM.x * m.userData.speed;
-            m.position.z += dirM.z * m.userData.speed;
+            // Проверка коллизий монстра со стенами лабиринта
+            const nextX = m.position.x + dirM.x * m.userData.speed;
+            const nextZ = m.position.z + dirM.z * m.userData.speed;
+            if (physics && !physics.checkCollision(nextX, nextZ)) {
+                m.position.x = nextX;
+                m.position.z = nextZ;
+            }
             m.lookAt(camera.position.x, 0, camera.position.z);
 
             if (dist < 1.3 && now - lastDamageTime > 1200) {
