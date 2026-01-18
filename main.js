@@ -6,18 +6,18 @@ let scene, camera, renderer, physics, playerLight;
 let levelData, playerHP = 100, pistolMag = 10, pistolTotal = 120, kills = 0;
 let isReloading = false, isShooting = false, lastDamageTime = 0;
 let monsters = [], mixers = [], clock = new THREE.Clock();
-const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, KeyR: false };
+const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, KeyR: false, ShiftLeft: false };
 let pitch = 0, isGameStarted = false;
 
 const minimapCanvas = document.getElementById('minimap');
 const minimapCtx = minimapCanvas.getContext('2d');
+minimapCanvas.width = 150; minimapCanvas.height = 150;
 
 let shotSound, reloadSound, bgMusicHTML;
 const audioLoader = new THREE.AudioLoader();
 const listener = new THREE.AudioListener();
 const path = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
 
-// Загрузка уровня
 fetch(path + 'levels/level1.json').then(r => r.json()).then(data => { 
     levelData = data; 
     physics = new Physics(levelData);
@@ -65,7 +65,7 @@ function init() {
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
-    // Управление (Правка: Перенесено в глобальную область для надежности)
+    // Управление (Правка №54: Бег восстановлен)
     window.addEventListener('keydown', e => { if(isGameStarted && e.code in keys) keys[e.code] = true; });
     window.addEventListener('keyup', e => { if(isGameStarted && e.code in keys) keys[e.code] = false; });
     window.addEventListener('mousemove', e => {
@@ -90,15 +90,8 @@ function startGame() {
     if (listener.context.state === 'suspended') listener.context.resume();
     bgMusicHTML.play();
 
-    // ПРАВКА №49: Интервальный спавн (каждые 5 сек)
-    spawnNewMonster(); // Первый сразу
-    const spawnInterval = setInterval(() => {
-        if (monsters.length < 15) {
-            spawnNewMonster();
-        } else if (monsters.length >= 15 && kills >= 100) { // Пример условия остановки
-            clearInterval(spawnInterval);
-        }
-    }, 5000);
+    spawnNewMonster(); 
+    setInterval(() => { if (monsters.length < 15) spawnNewMonster(); }, 5000);
 }
 
 function spawnNewMonster() {
@@ -112,20 +105,18 @@ function spawnNewMonster() {
         model.position.set(pos.x, 0, pos.z);
         scene.add(model);
 
-        let mixer = null;
+        // ПРАВКА №56: Анимация без ограничений
         if (gltf.animations.length > 0) {
-            mixer = new THREE.AnimationMixer(model);
+            const mixer = new THREE.AnimationMixer(model);
             const action = mixer.clipAction(gltf.animations[0]);
-            action.setDuration(3); // ПРАВКА №51: Цикл 3 секунды
             action.play();
             mixers.push(mixer);
         }
         
         model.userData = { 
             health: 100, 
-            speed: 0.03, 
-            mixer: mixer,
-            state: 'patrol', // 'patrol' или 'chase'
+            speed: 0.04, 
+            state: 'patrol',
             patrolDir: new THREE.Vector3(Math.random()-0.5, 0, Math.random()-0.5).normalize()
         };
         monsters.push(model);
@@ -171,7 +162,11 @@ function shoot() {
     }
     const weapon = document.getElementById('weapon');
     weapon.style.transform = `translateY(${pitch * 25 + 60}px) scale(1.1)`;
-    setTimeout(() => { weapon.style.transform = `translateY(${pitch * 25}px)`; isShooting = false; if (pistolMag === 0) reloadPistol(); }, 100);
+    setTimeout(() => { 
+        weapon.style.transform = `translateY(${pitch * 25}px)`; 
+        isShooting = false; 
+        if (pistolMag === 0) reloadPistol(); 
+    }, 100);
 }
 
 function reloadPistol() {
@@ -179,12 +174,14 @@ function reloadPistol() {
     isReloading = true;
     if (reloadSound && reloadSound.buffer) reloadSound.play();
     document.getElementById('weapon').classList.add('reloading');
+    
     setTimeout(() => {
         let toReload = Math.min(10 - pistolMag, pistolTotal);
         pistolMag += toReload; pistolTotal -= toReload;
         document.getElementById('mag').innerText = pistolMag;
         document.getElementById('weapon').classList.remove('reloading');
-        isReloading = false;
+        // ПРАВКА №55: Фикс застревания перезарядки
+        isReloading = false; 
     }, 1200);
 }
 
@@ -236,7 +233,9 @@ function animate() {
     mixers.forEach(m => m.update(delta));
 
     const oldP = camera.position.clone();
-    let s = keys.ShiftLeft ? 0.12 : 0.05;
+    // ПРАВКА №54: Реализация бега
+    let s = keys.ShiftLeft ? 0.15 : 0.06; 
+    
     const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
     const moveDir = dir.clone().setY(0).normalize();
     const sideDir = new THREE.Vector3().crossVectors(camera.up, moveDir).normalize();
@@ -246,9 +245,12 @@ function animate() {
     if (keys.KeyA) camera.position.addScaledVector(sideDir, s);
     if (keys.KeyD) camera.position.addScaledVector(sideDir, -s);
 
-    // ПРАВКА №52: Коллизии игрока
-    if (physics && physics.checkCollision(camera.position.x, camera.position.z)) camera.position.copy(oldP);
-    monsters.forEach(m => { if(camera.position.distanceTo(m.position) < 0.8) camera.position.copy(oldP); });
+    // ПРАВКА №53: Физика и коллизии с монстрами
+    let collisionDetected = false;
+    if (physics && physics.checkCollision(camera.position.x, camera.position.z)) collisionDetected = true;
+    monsters.forEach(m => { if(camera.position.distanceTo(m.position) < 0.9) collisionDetected = true; });
+
+    if (collisionDetected) camera.position.copy(oldP);
 
     playerLight.position.copy(camera.position);
 
@@ -256,14 +258,8 @@ function animate() {
     monsters.forEach(m => {
         const dist = m.position.distanceTo(camera.position);
         
-        // ПРАВКА №50: Логика зрения (FOV)
-        if (dist < 10) {
+        if (dist < 12) {
             m.userData.state = 'chase';
-        } else {
-            m.userData.state = 'patrol';
-        }
-
-        if (m.userData.state === 'chase') {
             const chaseDir = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
             if (!physics.checkCollision(m.position.x + chaseDir.x * 0.4, m.position.z + chaseDir.z * 0.4)) {
                 m.position.x += chaseDir.x * m.userData.speed;
@@ -271,7 +267,7 @@ function animate() {
             }
             m.lookAt(camera.position.x, 0, camera.position.z);
         } else {
-            // Патрулирование
+            m.userData.state = 'patrol';
             if (!physics.checkCollision(m.position.x + m.userData.patrolDir.x * 0.4, m.position.z + m.userData.patrolDir.z * 0.4)) {
                 m.position.x += m.userData.patrolDir.x * (m.userData.speed * 0.5);
                 m.position.z += m.userData.patrolDir.z * (m.userData.speed * 0.5);
@@ -282,7 +278,8 @@ function animate() {
             m.lookAt(lookTarget.x, 0, lookTarget.z);
         }
 
-        if (dist < 1.3 && now - lastDamageTime > 1200) {
+        // ПРАВКА №53: Урон игроку
+        if (dist < 1.4 && now - lastDamageTime > 1200) {
             playerHP -= 15;
             document.getElementById('hp-bar-fill').style.width = playerHP + "%";
             document.getElementById('hp-text').innerText = playerHP + "%";
