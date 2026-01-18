@@ -12,15 +12,15 @@ fetch('./levels/level1.json')
         levelData = data;
         init();
     })
-    .catch(err => alert("Ошибка JSON: " + err.message));
+    .catch(err => alert("Ошибка карты: " + err.message));
 
 function init() {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x050000);
-    // Сделали туман чуть гуще, чтобы скрыть "дыры" на горизонте
-    scene.fog = new THREE.Fog(0x050000, 1, 20);
+    scene.background = new THREE.Color(0x020000);
+    scene.fog = new THREE.Fog(0x020000, 1, 18);
 
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    // ИСПРАВЛЕНИЕ: Near plane = 0.05. Теперь стены не исчезают перед носом!
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 1000);
     camera.position.set(1.5, 1.6, 1.5); 
 
     renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -30,18 +30,22 @@ function init() {
     physics = new Physics(levelData);
     const loader = new THREE.TextureLoader();
 
+    // Загрузка текстур
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
+    wallTex.magFilter = THREE.NearestFilter; // Делаем текстуру "пиксельной" как в Doom
+    
     const floorTex = loader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
     floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
-    floorTex.repeat.set(50, 50);
+    floorTex.repeat.set(100, 100);
 
-    // СВЕТ: Уменьшили яркость, чтобы не слепило
-    scene.add(new THREE.AmbientLight(0x440000, 0.3)); // Фоновый красный свет
-    playerLight = new THREE.PointLight(0xffffff, 1.5, 12); // Фонарик стал в 50 раз слабее
+    // Мягкий свет
+    scene.add(new THREE.AmbientLight(0x220000, 0.5)); 
+    playerLight = new THREE.PointLight(0xffffff, 1.2, 12);
     scene.add(playerLight);
 
-    // СТЕНЫ: Увеличили размер блока до 1.01, чтобы убрать щели
-    const wallGeo = new THREE.BoxGeometry(1.01, 4, 1.01);
+    // СОЗДАНИЕ СТЕН (без дыр)
+    // Размер 1.05 чтобы блоки плотно смыкались
+    const wallGeo = new THREE.BoxGeometry(1.05, 4, 1.05);
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
 
     levelData.map.forEach((row, z) => {
@@ -58,29 +62,26 @@ function init() {
         });
     });
 
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ map: floorTex }));
+    // ЕДИНЫЙ ПОЛ И ПОТОЛОК (накрывают всё)
+    const planeGeo = new THREE.PlaneGeometry(200, 200);
+    
+    const floor = new THREE.Mesh(planeGeo, new THREE.MeshStandardMaterial({ map: floorTex }));
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(20, 0, 20);
     scene.add(floor);
 
-    // Потолок, чтобы не было видно пустоты сверху
-    const ceilMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), ceilMat);
+    const ceil = new THREE.Mesh(planeGeo, new THREE.MeshStandardMaterial({ color: 0x111111 }));
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(20, 4, 20);
     scene.add(ceil);
 
+    // Управление
     window.addEventListener('keydown', e => { if(e.code in keys) keys[e.code] = true; });
     window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
-    
     window.addEventListener('mousedown', () => {
-        if (!document.pointerLockElement) {
-            document.body.requestPointerLock();
-        } else {
-            shoot();
-        }
+        if (!document.pointerLockElement) document.body.requestPointerLock();
+        else shoot();
     });
-
     window.addEventListener('mousemove', e => {
         if (document.pointerLockElement) camera.rotation.y -= e.movementX * 0.002;
     });
@@ -112,10 +113,8 @@ function shoot() {
     if (ammo <= 0) return;
     ammo--;
     document.getElementById('am').innerText = ammo;
-    
-    // Вспышка при выстреле (не слишком яркая)
-    playerLight.intensity = 10;
-    setTimeout(() => playerLight.intensity = 1.5, 50);
+    playerLight.intensity = 8;
+    setTimeout(() => playerLight.intensity = 1.2, 50);
 
     const ray = new THREE.Raycaster();
     ray.setFromCamera({ x: 0, y: 0 }, camera);
@@ -133,7 +132,7 @@ function shoot() {
 function animate() {
     requestAnimationFrame(animate);
 
-    const speed = 0.12; // Чуть снизили скорость для точности
+    const speed = 0.12;
     const dir = new THREE.Vector3();
     camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
     const side = new THREE.Vector3().crossVectors(camera.up, dir).normalize();
@@ -144,8 +143,13 @@ function animate() {
     if (keys.KeyA) camera.position.addScaledVector(side, speed);
     if (keys.KeyD) camera.position.addScaledVector(side, -speed);
 
-    // Коллизии с запасом (чтобы не застревать в стенах)
-    if (physics.checkCollision(camera.position.x, camera.position.z)) {
+    // УЛУЧШЕННАЯ ПРОВЕРКА КОЛЛИЗИЙ
+    // Проверяем точку чуть впереди игрока (0.3), чтобы камера не входила в стену
+    const checkX = camera.position.x + (camera.position.x > oldP.x ? 0.3 : -0.3);
+    const checkZ = camera.position.z + (camera.position.z > oldP.z ? 0.3 : -0.3);
+    
+    if (physics.checkCollision(camera.position.x, camera.position.z) || 
+        physics.checkCollision(checkX, checkZ)) {
         camera.position.copy(oldP);
     }
 
