@@ -6,12 +6,17 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div id="damage-flash"></div>
     <div id="hud">
         <div class="stat"><span class="label">HEALTH</span><span id="hp">100</span>%</div>
         <div class="stat"><span class="label">AMMO</span><span id="am">50</span></div>
     </div>
+    
     <div id="crosshair"></div>
-    <div id="weapon"></div>
+    
+    <div id="weapon-container">
+        <div id="weapon"></div>
+    </div>
 
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
