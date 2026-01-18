@@ -3,7 +3,6 @@ body {
     overflow: hidden; 
     background-color: #000; 
     font-family: 'Courier New', Courier, monospace; 
-    cursor: none; /* Скрываем стандартный курсор Windows */
 }
 
 #hud {
@@ -13,18 +12,19 @@ body {
     color: #ff0000; font-size: 24px; font-weight: bold; z-index: 100;
 }
 
-/* Свободный прицел */
+.label { font-size: 12px; color: #666; display: block; }
+
+/* Центрированный прицел */
 #crosshair {
     position: absolute; 
     top: 50%; left: 50%;
     width: 6px; height: 6px;
-    border: 1px solid lime;
+    border: 1px solid #0f0;
     border-radius: 50%; 
+    transform: translate(-50%, -50%);
     pointer-events: none; 
     z-index: 50;
-    /* Убираем старый transform, так как будем управлять через JS */
-    margin-left: -3px;
-    margin-top: -3px;
+    transition: all 0.05s;
 }
 
 #weapon-container {
@@ -48,5 +48,4 @@ body {
     background-repeat: no-repeat;
     background-position: bottom center;
     transform-origin: bottom center;
-    /* Убираем transition для мгновенного следования за прицелом */
 }
