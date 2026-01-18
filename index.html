@@ -2,41 +2,38 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Horror Labyrinth 80x80</title>
+    <title>Horror Labyrinth</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="start-screen">
-        <div class="start-box">
-            <h1 class="horror-title">ПРИГОТОВСЯ СДОХНУТЬ</h1>
+        <div class="neon-border">
+            <h1 class="horror-title">ВЫХОДА НЕТ</h1>
             <button id="play-btn">СТАРТ</button>
         </div>
     </div>
 
     <div id="death-screen" style="display: none;">
-        <div class="death-box">
-            <h1 class="death-title">ТЫ ПОГИБ</h1>
-            <p id="stats-text">УБИТО: 0 | ВРЕМЯ: 0с</p>
-            <button onclick="location.reload()">ПОПРОБОВАТЬ СНОВА</button>
+        <div class="neon-border">
+            <h1 class="horror-title">ТЫ ПОГИБ</h1>
+            <p id="stats-text"></p>
+            <button onclick="location.reload()">ЗАНОВО</button>
         </div>
     </div>
 
-    <div id="damage-flash"></div>
     <div id="kill-counter">УБИТО: 0</div>
+    <div id="damage-flash"></div>
 
     <div id="hud">
         <div class="stat">
-            <span class="label">ЗДОРОВЬЕ</span>
             <div class="hp-bar-bg"><div id="hp-bar-fill"></div></div>
             <span id="hp-text">100%</span>
         </div>
         <div class="stat">
-            <span class="label">БОЕЗАПАС</span>
-            <span id="mag">10</span> / <span id="total-ammo">120</span>
+            БОЕЗАПАС: <span id="mag">10</span> / <span id="total-ammo">120</span>
         </div>
     </div>
-    
-    <div id="crosshair"></div>
+
     <div id="weapon-container"><div id="weapon"></div></div>
 
     <script type="importmap">
