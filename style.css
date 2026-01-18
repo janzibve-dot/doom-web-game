@@ -19,6 +19,14 @@ body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courie
     padding: 15px 40px; font-size: 20px; cursor: pointer;
 }
 
+/* МИНИКАРТА */
+#minimap-container {
+    position: absolute; top: 20px; left: 20px; width: 160px; height: 160px;
+    border: 2px solid #500; background: rgba(0, 0, 0, 0.7);
+    z-index: 100; overflow: hidden;
+}
+#minimap { width: 100%; height: 100%; }
+
 #crosshair {
     position: absolute; top: 50%; left: 50%; width: 12px; height: 12px;
     border: 2px solid #0f0; border-radius: 50%;
