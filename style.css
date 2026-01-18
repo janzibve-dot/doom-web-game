@@ -40,6 +40,7 @@ body {
 
 #weapon {
     width: 600px; height: 600px;
+    /* Путь без точки и слэша в начале - самый надежный для CSS на GitHub */
     background-image: url('assets/sprites/pistol.png');
     background-size: contain; background-repeat: no-repeat;
     background-position: bottom center; transform-origin: bottom center;
