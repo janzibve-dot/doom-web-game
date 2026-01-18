@@ -4,23 +4,21 @@ import { Physics } from './engine/physics.js';
 let scene, camera, renderer, physics, playerLight;
 let levelData;
 
-// Настройки игрока
 let playerHP = 100;
 let pistolMag = 10, pistolTotal = 120;
 let isReloading = false, isShooting = false;
 let lastDamageTime = 0;
 
-// Монстры
 let monsters = [];
 
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false, KeyR: false };
 let pitch = 0;
 
-// Звуки
 let shotSound, reloadSound, bgMusic;
 const audioLoader = new THREE.AudioLoader();
 const listener = new THREE.AudioListener();
 
+// Используем относительный путь для загрузки уровня
 fetch('./levels/level1.json')
     .then(r => r.json())
     .then(data => { levelData = data; init(); });
@@ -35,25 +33,25 @@ function init() {
     camera.rotation.order = 'YXZ'; 
     camera.add(listener);
 
-    // Звуки
+    // Исправленные пути к аудио
     bgMusic = new THREE.Audio(listener);
-    audioLoader.load('audio/music/fon.mp3', (buffer) => {
+    audioLoader.load('./audio/music/fon.mp3', (buffer) => {
         bgMusic.setBuffer(buffer);
         bgMusic.setLoop(true);
         bgMusic.setVolume(0.15);
-    });
+    }, undefined, (err) => console.error("Музыка не найдена по пути ./audio/music/fon.mp3"));
 
     shotSound = new THREE.Audio(listener);
-    audioLoader.load('audio/sfx/shot.mp3', (buffer) => {
+    audioLoader.load('./audio/sfx/shot.mp3', (buffer) => {
         shotSound.setBuffer(buffer);
         shotSound.setVolume(0.8);
-    });
+    }, undefined, (err) => console.error("Звук выстрела не найден по пути ./audio/sfx/shot.mp3"));
 
     reloadSound = new THREE.Audio(listener);
-    audioLoader.load('audio/sfx/reload.mp3', (buffer) => {
+    audioLoader.load('./audio/sfx/reload.mp3', (buffer) => {
         reloadSound.setBuffer(buffer);
         reloadSound.setVolume(0.6);
-    });
+    }, undefined, (err) => console.error("Звук перезарядки не найден по пути ./audio/sfx/reload.mp3"));
 
     renderer = new THREE.WebGLRenderer({ antialias: false });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -66,7 +64,6 @@ function init() {
     playerLight = new THREE.PointLight(0xffffff, 1.2, 15);
     scene.add(playerLight);
 
-    // Генерация уровня
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
     const wallGeo = new THREE.BoxGeometry(1.05, 4, 1.05);
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
@@ -85,7 +82,6 @@ function init() {
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
-    // События
     window.addEventListener('keydown', e => { 
         if(e.code in keys) keys[e.code] = true; 
         if(e.code === 'KeyR') reloadPistol();
@@ -93,11 +89,13 @@ function init() {
     window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
     
     window.addEventListener('mousedown', () => {
+        if (listener.context.state === 'suspended') listener.context.resume();
+
         if (document.pointerLockElement) {
             shoot();
         } else {
             document.body.requestPointerLock();
-            if (bgMusic.buffer && !bgMusic.isPlaying) bgMusic.play(); // Старт музыки после клика
+            if (bgMusic.buffer && !bgMusic.isPlaying) bgMusic.play();
         }
     });
 
@@ -111,7 +109,6 @@ function init() {
         }
     });
 
-    // Спавним монстров только спереди от игрока
     spawnMonster(5, 5);
     spawnMonster(2, 8);
 
@@ -120,14 +117,16 @@ function init() {
 
 function spawnMonster(x, z) {
     const loader = new THREE.TextureLoader();
-    const spriteMap = loader.load('assets/sprites/monster.png');
-    const spriteMat = new THREE.SpriteMaterial({ map: spriteMap });
-    const monster = new THREE.Sprite(spriteMat);
-    monster.position.set(x, 1, z);
-    monster.scale.set(2, 2, 1);
-    monster.userData = { health: 50, speed: 0.015 };
-    scene.add(monster);
-    monsters.push(monster);
+    // Исправленный путь к спрайту
+    loader.load('./assets/sprites/monster.png', (texture) => {
+        const spriteMat = new THREE.SpriteMaterial({ map: texture });
+        const monster = new THREE.Sprite(spriteMat);
+        monster.position.set(x, 1, z);
+        monster.scale.set(2, 2, 1);
+        monster.userData = { health: 50, speed: 0.015 };
+        scene.add(monster);
+        monsters.push(monster);
+    }, undefined, (err) => console.error("Спрайт монстра не найден по пути ./assets/sprites/monster.png"));
 }
 
 function updateWeaponPosition() {
@@ -188,8 +187,6 @@ function updateMonsters() {
     const now = Date.now();
     monsters.forEach(m => {
         const dist = m.position.distanceTo(camera.position);
-        
-        // Монстр идет к игроку, только если игрок видит его (примерно)
         const dirToPlayer = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
         
         if (dist < 15) {
@@ -198,10 +195,8 @@ function updateMonsters() {
             if (!physics.checkCollision(nextX, nextZ)) {
                 m.position.x = nextX; m.position.z = nextZ;
             }
-            
-            // Урон: только если монстр вплотную и прошла 1 секунда с прошлого удара
             if (dist < 1.2 && now - lastDamageTime > 1000) {
-                takeDamage(20); // Кусает на 20%
+                takeDamage(20);
                 lastDamageTime = now;
             }
         }
@@ -211,15 +206,11 @@ function updateMonsters() {
 function takeDamage(amount) {
     playerHP -= amount;
     if (playerHP < 0) playerHP = 0;
-    
-    // Обновление HUD
     document.getElementById('hp-bar-fill').style.width = playerHP + "%";
     document.getElementById('hp-text').innerText = Math.ceil(playerHP) + "%";
-    
     const flash = document.getElementById('damage-flash');
     flash.style.display = 'block';
     setTimeout(() => flash.style.display = 'none', 100);
-    
     if (playerHP <= 0) {
         alert("ВЫ ПОГИБЛИ");
         location.reload();
