@@ -6,13 +6,18 @@ let monsters = [], items = [], levelData;
 let health = 100, ammo = 50;
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false };
 
+// Переменные для оружия и анимации
+let currentWeapon = 'shotgun'; 
+let isShooting = false;
+let bobbingCounter = 0;
+
 fetch('./levels/level1.json')
     .then(r => r.json())
     .then(data => {
         levelData = data;
         init();
     })
-    .catch(err => alert("Ошибка карты: " + err.message));
+    .catch(err => alert("Ошибка загрузки карты: " + err.message));
 
 function init() {
     scene = new THREE.Scene();
@@ -32,10 +37,6 @@ function init() {
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
     wallTex.magFilter = THREE.NearestFilter; 
     
-    const floorTex = loader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
-    floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
-    floorTex.repeat.set(100, 100);
-
     scene.add(new THREE.AmbientLight(0x220000, 0.5)); 
     playerLight = new THREE.PointLight(0xffffff, 1.2, 12);
     scene.add(playerLight);
@@ -57,18 +58,19 @@ function init() {
         });
     });
 
-    const planeGeo = new THREE.PlaneGeometry(400, 400); // Увеличили плоскости под размер карты
-    const floor = new THREE.Mesh(planeGeo, new THREE.MeshStandardMaterial({ map: floorTex }));
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ color: 0x111111 }));
     floor.rotation.x = -Math.PI / 2;
-    floor.position.set(20, 0, 20);
     scene.add(floor);
 
-    const ceil = new THREE.Mesh(planeGeo, new THREE.MeshStandardMaterial({ color: 0x111111 }));
-    ceil.rotation.x = Math.PI / 2;
-    ceil.position.set(20, 4, 20);
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ color: 0x080808 }));
+    ceil.rotation.x = Math.PI / 2; ceil.position.y = 4;
     scene.add(ceil);
 
-    window.addEventListener('keydown', e => { if(e.code in keys) keys[e.code] = true; });
+    window.addEventListener('keydown', e => { 
+        if(e.code in keys) keys[e.code] = true;
+        if(e.key === '1') switchWeapon('shotgun');
+        if(e.key === '2') switchWeapon('pistol');
+    });
     window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
     window.addEventListener('mousedown', () => {
         if (!document.pointerLockElement) document.body.requestPointerLock();
@@ -81,61 +83,80 @@ function init() {
     animate();
 }
 
+function switchWeapon(type) {
+    if (isShooting) return;
+    currentWeapon = type;
+    const weaponImg = document.getElementById('weapon');
+    if (type === 'shotgun') {
+        weaponImg.style.backgroundImage = "url('https://raw.githubusercontent.com/pajadam/pajadam.github.io/master/doom-assets/shotgun.png')";
+        weaponImg.style.width = "300px";
+    } else {
+        weaponImg.style.backgroundImage = "url('https://raw.githubusercontent.com/pajadam/pajadam.github.io/master/doom-assets/pistol.png')";
+        weaponImg.style.width = "200px";
+    }
+}
+
+function shoot() {
+    if (ammo <= 0 || isShooting) return;
+    isShooting = true;
+    ammo--;
+    document.getElementById('am').innerText = ammo;
+    
+    playerLight.intensity = 8;
+    const weaponImg = document.getElementById('weapon');
+    weaponImg.style.bottom = "40px";
+
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera({ x: 0, y: 0 }, camera);
+    const hits = ray.intersectObjects(monsters.map(m => m.sprite));
+    
+    if (hits.length > 0) {
+        const target = monsters.find(m => m.sprite === hits[0].object);
+        target.health -= (currentWeapon === 'shotgun') ? 25 : 10;
+        if (target.health <= 0) {
+            scene.remove(target.sprite);
+            monsters = monsters.filter(m => m !== target);
+        }
+    }
+
+    const delay = (currentWeapon === 'shotgun') ? 600 : 200;
+    setTimeout(() => {
+        playerLight.intensity = 1.2;
+        weaponImg.style.bottom = "60px";
+        isShooting = false;
+    }, delay);
+}
+
 function createMonster(x, z, loader) {
     const tex = loader.load('https://raw.githubusercontent.com/pajadam/pajadam.github.io/master/doom-assets/imp_idle.png');
     const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
     const sprite = new THREE.Sprite(mat);
-    sprite.position.set(x, 1.2, z);
-    sprite.scale.set(1.8, 1.8, 1);
-    monsters.push({ sprite, health: 50 });
-    scene.add(sprite);
+    sprite.position.set(x, 1.2, z); sprite.scale.set(1.8, 1.8, 1);
+    monsters.push({ sprite, health: 50 }); scene.add(sprite);
 }
 
 function createItem(x, z, loader) {
     const tex = loader.load('https://raw.githubusercontent.com/pajadam/pajadam.github.io/master/doom-assets/medkit.png');
     const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
     const sprite = new THREE.Sprite(mat);
-    sprite.position.set(x, 0.5, z);
-    sprite.scale.set(0.7, 0.7, 1);
-    items.push({ sprite, x, z });
-    scene.add(sprite);
-}
-
-function shoot() {
-    if (ammo <= 0) return;
-    ammo--;
-    document.getElementById('am').innerText = ammo;
-    playerLight.intensity = 8;
-    setTimeout(() => playerLight.intensity = 1.2, 50);
-
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera({ x: 0, y: 0 }, camera);
-    const hits = ray.intersectObjects(monsters.map(m => m.sprite));
-    if (hits.length > 0) {
-        const target = monsters.find(m => m.sprite === hits[0].object);
-        target.health -= 25;
-        if (target.health <= 0) {
-            scene.remove(target.sprite);
-            monsters = monsters.filter(m => m !== target);
-        }
-    }
+    sprite.position.set(x, 0.5, z); sprite.scale.set(0.7, 0.7, 1);
+    items.push({ sprite, x, z }); scene.add(sprite);
 }
 
 function animate() {
     requestAnimationFrame(animate);
 
-    // НОВЫЕ ПАРАМЕТРЫ СКОРОСТИ
     let currentSpeed = keys.ShiftLeft ? 0.14 : 0.06; 
-    
     const dir = new THREE.Vector3();
     camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
     const side = new THREE.Vector3().crossVectors(camera.up, dir).normalize();
     const oldP = camera.position.clone();
 
-    if (keys.KeyW) camera.position.addScaledVector(dir, currentSpeed);
-    if (keys.KeyS) camera.position.addScaledVector(dir, -currentSpeed);
-    if (keys.KeyA) camera.position.addScaledVector(side, currentSpeed);
-    if (keys.KeyD) camera.position.addScaledVector(side, -currentSpeed);
+    let isMoving = false;
+    if (keys.KeyW) { camera.position.addScaledVector(dir, currentSpeed); isMoving = true; }
+    if (keys.KeyS) { camera.position.addScaledVector(dir, -currentSpeed); isMoving = true; }
+    if (keys.KeyA) { camera.position.addScaledVector(side, currentSpeed); isMoving = true; }
+    if (keys.KeyD) { camera.position.addScaledVector(side, -currentSpeed); isMoving = true; }
 
     const checkX = camera.position.x + (camera.position.x > oldP.x ? 0.3 : -0.3);
     const checkZ = camera.position.z + (camera.position.z > oldP.z ? 0.3 : -0.3);
@@ -145,12 +166,24 @@ function animate() {
         camera.position.copy(oldP);
     }
 
+    // ЭФФЕКТ ПОКАЧИВАНИЯ
+    const weaponImg = document.getElementById('weapon');
+    if (isMoving && !isShooting) {
+        bobbingCounter += currentSpeed * 2;
+        const bobX = Math.cos(bobbingCounter) * 15;
+        const bobY = Math.abs(Math.sin(bobbingCounter)) * 15;
+        weaponImg.style.transform = `translateX(calc(-50% + ${bobX}px))`;
+        weaponImg.style.bottom = (60 + bobY) + "px";
+    } else if (!isShooting) {
+        weaponImg.style.transform = "translateX(-50%)";
+        weaponImg.style.bottom = "60px";
+    }
+
     items = items.filter(it => {
         if (camera.position.distanceTo(it.sprite.position) < 1) {
             health = Math.min(100, health + 20);
             document.getElementById('hp').innerText = health;
-            scene.remove(it.sprite);
-            return false;
+            scene.remove(it.sprite); return false;
         }
         return true;
     });
