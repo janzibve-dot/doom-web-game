@@ -27,7 +27,6 @@ function init() {
     scene.background = new THREE.Color(0x010101);
     scene.fog = new THREE.Fog(0x000000, 1, 15);
 
-    // Правка №12: Сохранение настроек камеры (защита от прозрачности)
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
     camera.position.set(2, 1.6, 2);
     camera.rotation.order = 'YXZ'; 
@@ -40,6 +39,7 @@ function init() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
+    // Основной свет фонарика
     playerLight = new THREE.PointLight(0xffffff, 1.3, 12);
     playerLight.decay = 2;
     scene.add(playerLight);
@@ -47,10 +47,9 @@ function init() {
 
     const loader = new THREE.TextureLoader();
 
-    // Правка №10: Возврат кирпичных стен
+    // Кирпичные стены
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
     wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping;
-    wallTex.repeat.set(1, 1);
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
 
     levelData.map.forEach((row, z) => {
@@ -63,18 +62,14 @@ function init() {
         });
     });
 
-    // Правка №11: Возврат бетонного грязного пола
-    const floorTex = loader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg'); // Используем как основу для шума
-    const floorMat = new THREE.MeshStandardMaterial({ 
-        color: 0x222222, 
-        roughness: 0.9,
-        metalness: 0.1
-    });
+    // Бетонный пол
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), floorMat);
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
-    document.getElementById('start-screen').addEventListener('click', startGame);
+    // Правка №13: Запуск по кнопке СТАРТ
+    document.getElementById('play-btn').addEventListener('click', startGame);
 
     window.addEventListener('keydown', e => { if(e.code in keys) keys[e.code] = true; if(e.code === 'KeyR') reloadPistol(); });
     window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
@@ -96,7 +91,6 @@ function init() {
 function setupBackgroundMusic() {
     bgMusicHTML = new Audio(path + 'FON1.ogg');
     bgMusicHTML.loop = true;
-    // Правка №9: Сделали музыку тише
     bgMusicHTML.volume = 0.15; 
 }
 
@@ -111,7 +105,7 @@ function startGame() {
     document.getElementById('start-screen').style.display = 'none';
     document.body.requestPointerLock();
     if (listener.context.state === 'suspended') listener.context.resume();
-    bgMusicHTML.play().catch(e => console.log("Файл FON1.ogg не найден"));
+    bgMusicHTML.play();
 }
 
 function spawnMonster(x, z) {
@@ -193,6 +187,13 @@ function animate() {
 
     if (physics && physics.checkCollision(camera.position.x, camera.position.z)) {
         camera.position.copy(oldP);
+    }
+
+    // Правка №15: Редкое мерцание фонарика
+    if (Math.random() > 0.98) { // Шанс мерцания в кадре
+        playerLight.intensity = Math.random() * 0.5; // Резкое падение яркости
+    } else {
+        playerLight.intensity = THREE.MathUtils.lerp(playerLight.intensity, 1.3, 0.1); // Плавный возврат к норме
     }
 
     playerLight.position.copy(camera.position);
