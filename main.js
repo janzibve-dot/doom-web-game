@@ -6,7 +6,6 @@ let monsters = [], items = [], levelData;
 let health = 100, ammo = 50;
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false };
 
-// 1. ЗАГРУЗКА КАРТЫ
 fetch('./levels/level1.json')
     .then(r => r.json())
     .then(data => {
@@ -16,10 +15,10 @@ fetch('./levels/level1.json')
     .catch(err => alert("Ошибка JSON: " + err.message));
 
 function init() {
-    // 2. НАСТРОЙКА СЦЕНЫ
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0000);
-    scene.fog = new THREE.Fog(0x0a0000, 1, 25);
+    scene.background = new THREE.Color(0x050000);
+    // Сделали туман чуть гуще, чтобы скрыть "дыры" на горизонте
+    scene.fog = new THREE.Fog(0x050000, 1, 20);
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(1.5, 1.6, 1.5); 
@@ -31,19 +30,18 @@ function init() {
     physics = new Physics(levelData);
     const loader = new THREE.TextureLoader();
 
-    // 3. ЗАГРУЗКА ТЕКСТУР
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
     const floorTex = loader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
     floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
     floorTex.repeat.set(50, 50);
 
-    // 4. СВЕТ
-    scene.add(new THREE.AmbientLight(0xff0000, 0.1));
-    playerLight = new THREE.PointLight(0xffffff, 80, 15);
+    // СВЕТ: Уменьшили яркость, чтобы не слепило
+    scene.add(new THREE.AmbientLight(0x440000, 0.3)); // Фоновый красный свет
+    playerLight = new THREE.PointLight(0xffffff, 1.5, 12); // Фонарик стал в 50 раз слабее
     scene.add(playerLight);
 
-    // 5. СОЗДАНИЕ МИРА
-    const wallGeo = new THREE.BoxGeometry(1, 4, 1);
+    // СТЕНЫ: Увеличили размер блока до 1.01, чтобы убрать щели
+    const wallGeo = new THREE.BoxGeometry(1.01, 4, 1.01);
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
 
     levelData.map.forEach((row, z) => {
@@ -60,21 +58,31 @@ function init() {
         });
     });
 
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({ map: floorTex }));
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ map: floorTex }));
     floor.rotation.x = -Math.PI / 2;
+    floor.position.set(20, 0, 20);
     scene.add(floor);
 
-    // 6. УПРАВЛЕНИЕ (WASD + МЫШЬ)
+    // Потолок, чтобы не было видно пустоты сверху
+    const ceilMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), ceilMat);
+    ceil.rotation.x = Math.PI / 2;
+    ceil.position.set(20, 4, 20);
+    scene.add(ceil);
+
     window.addEventListener('keydown', e => { if(e.code in keys) keys[e.code] = true; });
     window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
     
     window.addEventListener('mousedown', () => {
-        document.body.requestPointerLock();
-        if (document.pointerLockElement) shoot();
+        if (!document.pointerLockElement) {
+            document.body.requestPointerLock();
+        } else {
+            shoot();
+        }
     });
 
     window.addEventListener('mousemove', e => {
-        if (document.pointerLockElement) camera.rotation.y -= e.movementX * 0.0025;
+        if (document.pointerLockElement) camera.rotation.y -= e.movementX * 0.002;
     });
 
     animate();
@@ -104,8 +112,10 @@ function shoot() {
     if (ammo <= 0) return;
     ammo--;
     document.getElementById('am').innerText = ammo;
-    playerLight.intensity = 500;
-    setTimeout(() => playerLight.intensity = 80, 70);
+    
+    // Вспышка при выстреле (не слишком яркая)
+    playerLight.intensity = 10;
+    setTimeout(() => playerLight.intensity = 1.5, 50);
 
     const ray = new THREE.Raycaster();
     ray.setFromCamera({ x: 0, y: 0 }, camera);
@@ -123,8 +133,7 @@ function shoot() {
 function animate() {
     requestAnimationFrame(animate);
 
-    // ДВИЖЕНИЕ
-    const speed = 0.15;
+    const speed = 0.12; // Чуть снизили скорость для точности
     const dir = new THREE.Vector3();
     camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
     const side = new THREE.Vector3().crossVectors(camera.up, dir).normalize();
@@ -135,12 +144,11 @@ function animate() {
     if (keys.KeyA) camera.position.addScaledVector(side, speed);
     if (keys.KeyD) camera.position.addScaledVector(side, -speed);
 
-    // КОЛЛИЗИИ
+    // Коллизии с запасом (чтобы не застревать в стенах)
     if (physics.checkCollision(camera.position.x, camera.position.z)) {
         camera.position.copy(oldP);
     }
 
-    // СБОР ПРЕДМЕТОВ
     items = items.filter(it => {
         if (camera.position.distanceTo(it.sprite.position) < 1) {
             health = Math.min(100, health + 20);
@@ -151,9 +159,7 @@ function animate() {
         return true;
     });
 
-    // ПОВОРОТ МОНСТРОВ К ИГРОКУ
     monsters.forEach(m => m.sprite.lookAt(camera.position));
-
     playerLight.position.copy(camera.position);
     renderer.render(scene, camera);
 }
