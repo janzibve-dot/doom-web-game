@@ -45,6 +45,7 @@ function init() {
     wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping;
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
 
+    // Отрисовка стен
     levelData.map.forEach((row, z) => {
         row.forEach((cell, x) => {
             if (cell === 1) {
@@ -55,10 +56,20 @@ function init() {
         });
     });
 
+    // ИСПРАВЛЕНИЕ ПОТОЛКА И ПОЛА
+    const mapSizeZ = levelData.map.length;
+    const mapSizeX = levelData.map[0].length;
+    
     const floorMat = new THREE.MeshStandardMaterial({ color: 0x050505 });
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), floorMat);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(mapSizeX * 2, mapSizeZ * 2), floorMat);
+    floor.position.set(mapSizeX/2, 0, mapSizeZ/2);
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
+
+    const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(mapSizeX * 2, mapSizeZ * 2), floorMat);
+    ceiling.position.set(mapSizeX/2, 4, mapSizeZ/2); // Потолок на высоте 4
+    ceiling.rotation.x = Math.PI / 2;
+    scene.add(ceiling);
 
     document.getElementById('play-btn').onclick = () => startGame();
 
@@ -70,12 +81,11 @@ function init() {
             pitch -= e.movementY * 0.002;
             pitch = Math.max(-1.4, Math.min(1.4, pitch));
             camera.rotation.x = pitch;
-            // Обновляем положение оружия при повороте головы
             document.getElementById('weapon').style.transform = `translateY(${pitch * 20}px)`;
         }
     };
     window.onmousedown = () => { if (isGameStarted && !isDead) shoot(); };
-    window.addEventListener('keydown', e => { if(isGameStarted && e.code === 'KeyR') reloadPistol(); });
+    window.addEventListener('keydown', e => { if(isGameStarted && e.code === 'KeyR' && !isReloading) reloadPistol(); });
 
     animate();
 }
@@ -208,13 +218,13 @@ function shoot() {
                 scene.remove(obj);
                 monsters = monsters.filter(m => m !== obj);
                 kills++; document.getElementById('kill-counter').innerText = "УБИТО: " + kills;
+                spawnRandomMonster();
             }
         }
     }
 }
 
 function reloadPistol() {
-    if (isReloading || pistolMag === 10 || pistolTotal <= 0) return;
     isReloading = true;
     if (reloadSound && reloadSound.buffer) reloadSound.play();
     document.getElementById('weapon').classList.add('reloading');
