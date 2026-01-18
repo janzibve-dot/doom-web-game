@@ -2,13 +2,16 @@ import * as THREE from 'three';
 import { Physics } from './engine/physics.js';
 
 let scene, camera, renderer, physics, playerLight;
-let monsters = [], levelData;
+let levelData;
 let health = 100, ammo = 100;
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false };
-let isShooting = false;
 
-// Звуковые переменные
-let listener, shotSound;
+// Координаты прицела на экране (в пикселях)
+let crosshairX = window.innerWidth / 2;
+let crosshairY = window.innerHeight / 2;
+
+let isShooting = false;
+let shotSound;
 const audioLoader = new THREE.AudioLoader();
 
 fetch('./levels/level1.json')
@@ -23,17 +26,12 @@ function init() {
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 1000);
     camera.position.set(2, 1.6, 2);
 
-    // Инициализация аудио-слушателя
-    listener = new THREE.AudioListener();
+    const listener = new THREE.AudioListener();
     camera.add(listener);
-
-    // Инициализация звука выстрела
     shotSound = new THREE.Audio(listener);
-
-    // Загрузка звука
     audioLoader.load('audio/sfx/shot.mp3', (buffer) => {
         shotSound.setBuffer(buffer);
-        shotSound.setVolume(0.4); // Громкость 40%
+        shotSound.setVolume(0.4);
     });
 
     renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -47,7 +45,6 @@ function init() {
     playerLight = new THREE.PointLight(0xffffff, 1.2, 15);
     scene.add(playerLight);
 
-    // Стены
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
     const wallGeo = new THREE.BoxGeometry(1.05, 4, 1.05);
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
@@ -66,59 +63,79 @@ function init() {
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
-    // События ввода
     window.addEventListener('keydown', e => { if(e.code in keys) keys[e.code] = true; });
     window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
     
-    // Мгновенная реакция на нажатие (mousedown - это самый быстрый способ поймать клик)
-    window.addEventListener('mousedown', (e) => {
-        if (document.pointerLockElement) {
-            if (e.button === 0) shoot();
-        } else {
+    // Блокировка курсора для захвата движений мыши
+    window.addEventListener('mousedown', () => {
+        if (!document.pointerLockElement) {
             document.body.requestPointerLock();
+        } else {
+            shoot();
         }
     });
 
     window.addEventListener('mousemove', e => {
-        if (document.pointerLockElement) camera.rotation.y -= e.movementX * 0.002;
+        if (document.pointerLockElement) {
+            // Двигаем прицел
+            crosshairX += e.movementX;
+            crosshairY += e.movementY;
+
+            // Ограничиваем прицел краями экрана
+            crosshairX = Math.max(0, Math.min(window.innerWidth, crosshairX));
+            crosshairY = Math.max(0, Math.min(window.innerHeight, crosshairY));
+
+            // Поворачиваем камеру, если прицел у края
+            const edgeThreshold = 100; // зона активации поворота у края
+            if (crosshairX > window.innerWidth - edgeThreshold) camera.rotation.y -= 0.02;
+            if (crosshairX < edgeThreshold) camera.rotation.y += 0.02;
+
+            updateCrosshairPosition();
+        }
     });
 
     animate();
 }
 
+function updateCrosshairPosition() {
+    const ch = document.getElementById('crosshair');
+    const wp = document.getElementById('weapon');
+
+    // Обновляем позицию прицела на экране
+    ch.style.left = crosshairX + 'px';
+    ch.style.top = crosshairY + 'px';
+
+    // Наклоняем пистолет в сторону прицела (параллакс)
+    const offsetX = (crosshairX - window.innerWidth / 2) / 10;
+    const offsetY = (window.innerHeight / 2 - crosshairY) / 15;
+    if (!isShooting) {
+        wp.style.transform = `translateX(${offsetX}px) translateY(${offsetY}px)`;
+    }
+}
+
 function shoot() {
-    // Если анимация еще идет или кончились патроны — выходим
     if (isShooting || ammo <= 0) return;
-    
     isShooting = true;
     ammo--;
     document.getElementById('am').innerText = ammo;
 
-    // 1. ЗВУК: Мгновенный запуск
     if (shotSound.buffer) {
-        if (shotSound.isPlaying) shotSound.stop(); // Остановка предыдущего, если стреляем быстро
+        if (shotSound.isPlaying) shotSound.stop();
         shotSound.play();
     }
 
-    // 2. АНИМАЦИЯ: Мгновенная отдача
     const weapon = document.getElementById('weapon');
-    playerLight.intensity = 15; // Вспышка ярче
-    
-    // Сдвиг вверх и легкий поворот назад (эффект подброса ствола)
-    weapon.style.transition = "none"; // Убираем плавность для мгновенного рывка
-    weapon.style.transform = "translateY(70px) scale(1.1) rotate(-5deg)"; 
+    playerLight.intensity = 15;
 
-    // 3. ВОЗВРАТ: Плавное возвращение в исходную позицию
+    // Анимация выстрела с сохранением текущего смещения прицела
+    const currentTransform = weapon.style.transform;
+    weapon.style.transform = `${currentTransform} scale(1.1) rotate(-5deg)`;
+
     setTimeout(() => {
         playerLight.intensity = 1.2;
-        weapon.style.transition = "transform 0.1s ease-out"; // Возвращаем плавно
-        weapon.style.transform = "translateY(0) scale(1) rotate(0deg)";
-        
-        // Разрешаем следующий выстрел чуть раньше, чем закончится анимация возврата
-        setTimeout(() => {
-            isShooting = false;
-        }, 50); 
-    }, 60); // 60мс — время "вспышки"
+        updateCrosshairPosition(); // Возвращаем к позиции прицела
+        isShooting = false;
+    }, 80);
 }
 
 function animate() {
@@ -135,9 +152,7 @@ function animate() {
     if (keys.KeyA) camera.position.addScaledVector(side, speed);
     if (keys.KeyD) camera.position.addScaledVector(side, -speed);
 
-    if (physics.checkCollision(camera.position.x, camera.position.z)) {
-        camera.position.copy(oldP);
-    }
+    if (physics.checkCollision(camera.position.x, camera.position.z)) camera.position.copy(oldP);
 
     playerLight.position.copy(camera.position);
     renderer.render(scene, camera);
