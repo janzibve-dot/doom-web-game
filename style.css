@@ -25,7 +25,7 @@ body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courie
     pointer-events: none; z-index: 200; overflow: hidden;
 }
 #weapon {
-    width: 550px; height: 450px;
+    width: 500px; height: 450px;
     background: url('assets/sprites/pistol.png') no-repeat bottom center;
     background-size: contain; transform-origin: bottom center;
 }
