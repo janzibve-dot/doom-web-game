@@ -4,10 +4,11 @@ import { Physics } from './engine/physics.js';
 let scene, camera, renderer, physics, playerLight;
 let levelData;
 
-// Настройки патронов
+// Настройки игрока и оружия
 let pistolMag = 10;
 let pistolTotal = 120;
 let isReloading = false;
+let playerHP = 100;
 
 // Монстры
 let monsters = [];
@@ -17,7 +18,7 @@ let pitch = 0;
 let isShooting = false;
 
 // Звуки
-let shotSound, reloadSound;
+let shotSound, reloadSound, bgMusic;
 const audioLoader = new THREE.AudioLoader();
 
 fetch('./levels/level1.json')
@@ -36,18 +37,27 @@ function init() {
     const listener = new THREE.AudioListener();
     camera.add(listener);
     
-    // Загрузка звука выстрела
+    // 1. Фоновая музыка (файл fon.mp3)
+    bgMusic = new THREE.Audio(listener);
+    audioLoader.load('audio/music/fon.mp3', (buffer) => {
+        bgMusic.setBuffer(buffer);
+        bgMusic.setLoop(true);
+        bgMusic.setVolume(0.15); 
+        bgMusic.play();
+    });
+
+    // 2. Звук выстрела (ГРОМКО)
     shotSound = new THREE.Audio(listener);
     audioLoader.load('audio/sfx/shot.mp3', (buffer) => {
         shotSound.setBuffer(buffer);
-        shotSound.setVolume(0.4);
+        shotSound.setVolume(0.9); 
     });
 
-    // Загрузка звука перезарядки
+    // 3. Звук перезарядки
     reloadSound = new THREE.Audio(listener);
     audioLoader.load('audio/sfx/reload.mp3', (buffer) => {
         reloadSound.setBuffer(buffer);
-        reloadSound.setVolume(0.5);
+        reloadSound.setVolume(0.7);
     });
 
     renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -61,6 +71,7 @@ function init() {
     playerLight = new THREE.PointLight(0xffffff, 1.2, 15);
     scene.add(playerLight);
 
+    // Стены
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
     const wallGeo = new THREE.BoxGeometry(1.05, 4, 1.05);
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
@@ -79,7 +90,6 @@ function init() {
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
-    // СОБЫТИЯ
     window.addEventListener('keydown', e => { 
         if(e.code in keys) keys[e.code] = true; 
         if(e.code === 'KeyR') reloadPistol();
@@ -104,20 +114,26 @@ function init() {
         }
     });
 
-    // Создадим первого пробного монстра (визуально)
+    // Создаем несколько монстров
     spawnMonster(5, 5);
+    spawnMonster(8, 10);
 
     animate();
 }
 
 function spawnMonster(x, z) {
     const loader = new THREE.TextureLoader();
-    const spriteMap = loader.load('assets/sprites/monster.png'); // Убедись, что файл есть
+    const spriteMap = loader.load('assets/sprites/monster.png');
     const spriteMat = new THREE.SpriteMaterial({ map: spriteMap });
     const monster = new THREE.Sprite(spriteMat);
     monster.position.set(x, 1, z);
     monster.scale.set(2, 2, 1);
-    monster.userData = { health: 50 };
+    // Данные ИИ монстра
+    monster.userData = { 
+        health: 50, 
+        speed: 0.02, 
+        range: 15 // Дистанция, с которой он начинает преследовать
+    };
     scene.add(monster);
     monsters.push(monster);
 }
@@ -131,29 +147,21 @@ function updateWeaponPosition(offsetY = 0) {
 
 function reloadPistol() {
     if (isReloading || pistolMag === 10 || pistolTotal <= 0) return;
-    
     isReloading = true;
     const weapon = document.getElementById('weapon');
-    
-    // Включаем звук перезарядки
     if (reloadSound.buffer) {
         if (reloadSound.isPlaying) reloadSound.stop();
         reloadSound.play();
     }
-
     weapon.classList.add('reloading');
-
     setTimeout(() => {
         let needed = 10 - pistolMag;
         let toReload = Math.min(needed, pistolTotal);
         pistolMag += toReload;
         pistolTotal -= toReload;
-
         document.getElementById('mag').innerText = pistolMag;
         document.getElementById('total-ammo').innerText = pistolTotal;
-
         weapon.classList.remove('reloading');
-        
         setTimeout(() => {
             isReloading = false;
             updateWeaponPosition();
@@ -163,30 +171,24 @@ function reloadPistol() {
 
 function shoot() {
     if (isShooting || isReloading) return;
-    if (pistolMag <= 0) {
-        reloadPistol();
-        return;
-    }
+    if (pistolMag <= 0) { reloadPistol(); return; }
 
     isShooting = true;
     pistolMag--;
     document.getElementById('mag').innerText = pistolMag;
-
     if (shotSound.buffer) {
         if (shotSound.isPlaying) shotSound.stop();
         shotSound.play();
     }
 
-    // Простая логика попадания (Raycasting)
     const raycaster = new THREE.Raycaster();
-    const center = new THREE.Vector2(0, 0); // Центр экрана
+    const center = new THREE.Vector2(0, 0);
     raycaster.setFromCamera(center, camera);
     const intersects = raycaster.intersectObjects(monsters);
 
     if (intersects.length > 0) {
         let hitMonster = intersects[0].object;
         hitMonster.userData.health -= 25;
-        console.log("Попадание в монстра! HP:", hitMonster.userData.health);
         if (hitMonster.userData.health <= 0) {
             scene.remove(hitMonster);
             monsters = monsters.filter(m => m !== hitMonster);
@@ -205,6 +207,46 @@ function shoot() {
         isShooting = false;
         if (pistolMag === 0) reloadPistol();
     }, 80);
+}
+
+function updateMonsters() {
+    monsters.forEach(monster => {
+        const dist = monster.position.distanceTo(camera.position);
+        
+        // Если игрок рядом, монстр идет к нему
+        if (dist < monster.userData.range) {
+            const dir = new THREE.Vector3();
+            dir.subVectors(camera.position, monster.position).normalize();
+            dir.y = 0; // Монстры не летают
+            
+            // Проверка коллизий для монстра (упрощенно)
+            const nextX = monster.position.x + dir.x * monster.userData.speed;
+            const nextZ = monster.position.z + dir.z * monster.userData.speed;
+            
+            if (!physics.checkCollision(nextX, nextZ)) {
+                monster.position.x = nextX;
+                monster.position.z = nextZ;
+            }
+
+            // Если монстр коснулся игрока
+            if (dist < 0.8) {
+                takeDamage(0.5); // Урон игроку
+            }
+        }
+    });
+}
+
+function takeDamage(amount) {
+    playerHP -= amount;
+    document.getElementById('hp').innerText = Math.ceil(playerHP);
+    const flash = document.getElementById('damage-flash');
+    flash.style.display = 'block';
+    setTimeout(() => flash.style.display = 'none', 50);
+    
+    if (playerHP <= 0) {
+        alert("ВЫ ПОГИБЛИ");
+        location.reload();
+    }
 }
 
 function animate() {
@@ -226,6 +268,8 @@ function animate() {
     if (physics.checkCollision(camera.position.x, camera.position.z)) {
         camera.position.copy(oldP);
     }
+
+    updateMonsters(); // Обновляем логику ИИ
 
     playerLight.position.copy(camera.position);
     renderer.render(scene, camera);
