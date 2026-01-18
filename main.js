@@ -8,7 +8,6 @@ let playerHP = 100;
 let pistolMag = 10, pistolTotal = 120;
 let isReloading = false, isShooting = false;
 let lastDamageTime = 0;
-
 let monsters = [];
 
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false, KeyR: false };
@@ -18,13 +17,13 @@ let shotSound, reloadSound, bgMusic;
 const audioLoader = new THREE.AudioLoader();
 const listener = new THREE.AudioListener();
 
-// Автоматическое определение базового пути для GitHub Pages
-const baseUrl = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+// ГАРАНТИРОВАННЫЙ ПУТЬ ДЛЯ GITHUB PAGES
+const path = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';
 
-fetch(baseUrl + 'levels/level1.json')
+fetch(path + 'levels/level1.json')
     .then(r => r.json())
     .then(data => { levelData = data; init(); })
-    .catch(err => console.error("Ошибка загрузки уровня:", err));
+    .catch(err => console.error("Ошибка загрузки уровня. Проверь файл levels/level1.json"));
 
 function init() {
     scene = new THREE.Scene();
@@ -36,22 +35,22 @@ function init() {
     camera.rotation.order = 'YXZ'; 
     camera.add(listener);
 
-    // Звуки с динамическими путями
+    // Загрузка звуков с учетом пути репозитория
     bgMusic = new THREE.Audio(listener);
-    audioLoader.load(baseUrl + 'audio/music/fon.mp3', (buffer) => {
+    audioLoader.load(path + 'audio/music/fon.mp3', (buffer) => {
         bgMusic.setBuffer(buffer);
         bgMusic.setLoop(true);
         bgMusic.setVolume(0.15);
-    }, undefined, (err) => console.log("Музыка fon.mp3 не найдена в audio/music/"));
+    }, undefined, (err) => console.log("Файл fon.mp3 не найден по адресу: " + path + "audio/music/fon.mp3"));
 
     shotSound = new THREE.Audio(listener);
-    audioLoader.load(baseUrl + 'audio/sfx/shot.mp3', (buffer) => {
+    audioLoader.load(path + 'audio/sfx/shot.mp3', (buffer) => {
         shotSound.setBuffer(buffer);
         shotSound.setVolume(0.8);
     });
 
     reloadSound = new THREE.Audio(listener);
-    audioLoader.load(baseUrl + 'audio/sfx/reload.mp3', (buffer) => {
+    audioLoader.load(path + 'audio/sfx/reload.mp3', (buffer) => {
         reloadSound.setBuffer(buffer);
         reloadSound.setVolume(0.6);
     });
@@ -85,6 +84,7 @@ function init() {
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
+    // События
     window.addEventListener('keydown', e => { 
         if(e.code in keys) keys[e.code] = true; 
         if(e.code === 'KeyR') reloadPistol();
@@ -93,7 +93,6 @@ function init() {
     
     window.addEventListener('mousedown', () => {
         if (listener.context.state === 'suspended') listener.context.resume();
-
         if (document.pointerLockElement) {
             shoot();
         } else {
@@ -112,6 +111,7 @@ function init() {
         }
     });
 
+    // Создаем монстров
     spawnMonster(5, 5);
     spawnMonster(2, 8);
 
@@ -120,7 +120,7 @@ function init() {
 
 function spawnMonster(x, z) {
     const loader = new THREE.TextureLoader();
-    loader.load(baseUrl + 'assets/sprites/monster.png', (texture) => {
+    loader.load(path + 'assets/sprites/monster.png', (texture) => {
         const spriteMat = new THREE.SpriteMaterial({ map: texture });
         const monster = new THREE.Sprite(spriteMat);
         monster.position.set(x, 1, z);
@@ -128,7 +128,7 @@ function spawnMonster(x, z) {
         monster.userData = { health: 50, speed: 0.015 };
         scene.add(monster);
         monsters.push(monster);
-    }, undefined, (err) => console.log("Спрайт monster.png не найден в assets/sprites/"));
+    }, undefined, (err) => console.log("Монстр не найден по адресу: " + path + "assets/sprites/monster.png"));
 }
 
 function updateWeaponPosition() {
@@ -156,7 +156,6 @@ function reloadPistol() {
 function shoot() {
     if (isShooting || isReloading) return;
     if (pistolMag <= 0) { reloadPistol(); return; }
-
     isShooting = true;
     pistolMag--;
     document.getElementById('mag').innerText = pistolMag;
@@ -190,7 +189,6 @@ function updateMonsters() {
     monsters.forEach(m => {
         const dist = m.position.distanceTo(camera.position);
         const dirToPlayer = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
-        
         if (dist < 15) {
             const nextX = m.position.x + dirToPlayer.x * m.userData.speed;
             const nextZ = m.position.z + dirToPlayer.z * m.userData.speed;
