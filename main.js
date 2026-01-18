@@ -7,10 +7,7 @@ let levelData, playerHP = 100, pistolMag = 10, pistolTotal = 120, kills = 0;
 let isReloading = false, isShooting = false, lastDamageTime = 0;
 let monsters = [], mixers = [], clock = new THREE.Clock();
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, KeyR: false };
-let pitch = 0;
-
-// Глобальный контроль атак (Правка №46)
-let isAnyMonsterAttacking = false;
+let pitch = 0, isGameStarted = false;
 
 const minimapCanvas = document.getElementById('minimap');
 const minimapCtx = minimapCanvas.getContext('2d');
@@ -20,6 +17,7 @@ const audioLoader = new THREE.AudioLoader();
 const listener = new THREE.AudioListener();
 const path = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
 
+// Загрузка уровня
 fetch(path + 'levels/level1.json').then(r => r.json()).then(data => { 
     levelData = data; 
     physics = new Physics(levelData);
@@ -67,34 +65,40 @@ function init() {
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
-    document.getElementById('play-btn').addEventListener('click', startGame);
-    window.addEventListener('keydown', e => { if(e.code in keys) keys[e.code] = true; if(e.code === 'KeyR') reloadPistol(); });
-    window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
+    // Управление (Правка: Перенесено в глобальную область для надежности)
+    window.addEventListener('keydown', e => { if(isGameStarted && e.code in keys) keys[e.code] = true; });
+    window.addEventListener('keyup', e => { if(isGameStarted && e.code in keys) keys[e.code] = false; });
     window.addEventListener('mousemove', e => {
-        if (document.pointerLockElement) {
+        if (isGameStarted && document.pointerLockElement) {
             camera.rotation.y -= e.movementX * 0.002;
             pitch -= e.movementY * 0.002;
             pitch = Math.max(-1.4, Math.min(1.4, pitch));
             camera.rotation.x = pitch;
         }
     });
-    window.addEventListener('mousedown', () => { if (document.pointerLockElement) shoot(); });
+    window.addEventListener('mousedown', () => { if (isGameStarted && document.pointerLockElement) shoot(); });
+    window.addEventListener('keydown', e => { if(isGameStarted && e.code === 'KeyR') reloadPistol(); });
 
-    for(let i=0; i<15; i++) { spawnNewMonster(); }
+    document.getElementById('play-btn').addEventListener('click', startGame);
     animate();
 }
 
-function findSafeSpawn() {
-    let attempts = 0;
-    while (attempts < 300) {
-        let x = Math.floor(Math.random() * levelData.map[0].length);
-        let z = Math.floor(Math.random() * levelData.map.length);
-        if (levelData.map[z][x] === 0 && Math.abs(x - camera.position.x) > 10) {
-            return { x: x + 0.5, z: z + 0.5 };
+function startGame() {
+    isGameStarted = true;
+    document.getElementById('start-screen').style.display = 'none';
+    document.body.requestPointerLock();
+    if (listener.context.state === 'suspended') listener.context.resume();
+    bgMusicHTML.play();
+
+    // ПРАВКА №49: Интервальный спавн (каждые 5 сек)
+    spawnNewMonster(); // Первый сразу
+    const spawnInterval = setInterval(() => {
+        if (monsters.length < 15) {
+            spawnNewMonster();
+        } else if (monsters.length >= 15 && kills >= 100) { // Пример условия остановки
+            clearInterval(spawnInterval);
         }
-        attempts++;
-    }
-    return { x: 2, z: 2 };
+    }, 5000);
 }
 
 function spawnNewMonster() {
@@ -112,21 +116,33 @@ function spawnNewMonster() {
         if (gltf.animations.length > 0) {
             mixer = new THREE.AnimationMixer(model);
             const action = mixer.clipAction(gltf.animations[0]);
-            // ПРАВКА №48: Цикл только первых 3 секунд
-            action.setDuration(3); 
-            action.setLoop(THREE.LoopRepeat);
+            action.setDuration(3); // ПРАВКА №51: Цикл 3 секунды
             action.play();
             mixers.push(mixer);
         }
         
         model.userData = { 
             health: 100, 
-            speed: 0.03 + Math.random() * 0.02, 
+            speed: 0.03, 
             mixer: mixer,
-            radius: 0.6 // Для расталкивания
+            state: 'patrol', // 'patrol' или 'chase'
+            patrolDir: new THREE.Vector3(Math.random()-0.5, 0, Math.random()-0.5).normalize()
         };
         monsters.push(model);
     });
+}
+
+function findSafeSpawn() {
+    let attempts = 0;
+    while (attempts < 100) {
+        let x = Math.floor(Math.random() * levelData.map[0].length);
+        let z = Math.floor(Math.random() * levelData.map.length);
+        if (levelData.map[z][x] === 0 && Math.abs(x - camera.position.x) > 5) {
+            return { x: x + 0.5, z: z + 0.5 };
+        }
+        attempts++;
+    }
+    return { x: 2, z: 2 };
 }
 
 function shoot() {
@@ -147,11 +163,9 @@ function shoot() {
             target.userData.health -= 7;
             if (target.userData.health <= 0) {
                 scene.remove(target);
-                if (target.userData.mixer) { mixers = mixers.filter(m => m !== target.userData.mixer); }
                 monsters = monsters.filter(m => m !== target);
                 kills++;
                 document.getElementById('kill-counter').innerText = "УБИТО: " + kills;
-                spawnNewMonster();
             }
         }
     }
@@ -159,8 +173,6 @@ function shoot() {
     weapon.style.transform = `translateY(${pitch * 25 + 60}px) scale(1.1)`;
     setTimeout(() => { weapon.style.transform = `translateY(${pitch * 25}px)`; isShooting = false; if (pistolMag === 0) reloadPistol(); }, 100);
 }
-
-// ... вспомогательные функции (reloadPistol, setupBackgroundMusic, loadSFX, startGame, drawMinimap) без изменений ...
 
 function reloadPistol() {
     if (isReloading || pistolMag === 10 || pistolTotal <= 0) return;
@@ -189,13 +201,6 @@ function loadSFX() {
     audioLoader.load(path + 'audio/sfx/reload.mp3', (buffer) => { reloadSound.setBuffer(buffer); });
 }
 
-function startGame() {
-    document.getElementById('start-screen').style.display = 'none';
-    document.body.requestPointerLock();
-    if (listener.context.state === 'suspended') listener.context.resume();
-    bgMusicHTML.play();
-}
-
 function drawMinimap() {
     minimapCtx.clearRect(0, 0, 150, 150);
     const zoom = 8; const centerX = 75; const centerY = 75;
@@ -214,84 +219,77 @@ function drawMinimap() {
     minimapCtx.fillStyle = "#f00";
     monsters.forEach(m => {
         const dx = centerX + (m.position.x - camera.position.x) * zoom;
-        const dz = centerY + (z - camera.position.z) * zoom;
+        const dz = centerY + (m.position.z - camera.position.z) * zoom;
         minimapCtx.beginPath(); minimapCtx.arc(dx, dz, 3, 0, Math.PI * 2); minimapCtx.fill();
     });
     minimapCtx.save();
     minimapCtx.translate(centerX, centerY); minimapCtx.rotate(-camera.rotation.y);
     minimapCtx.fillStyle = "#0f0"; minimapCtx.beginPath(); minimapCtx.moveTo(0, -6); minimapCtx.lineTo(4, 4); minimapCtx.lineTo(-4, 4); minimapCtx.fill();
     minimapCtx.restore();
-    const deg = Math.round((camera.rotation.y * 180 / Math.PI) % 360);
-    document.getElementById('compass').innerText = `К: ${deg}°`;
 }
 
 function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
+    if (!isGameStarted) return;
+
     mixers.forEach(m => m.update(delta));
 
     const oldP = camera.position.clone();
+    let s = keys.ShiftLeft ? 0.12 : 0.05;
     const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
     const moveDir = dir.clone().setY(0).normalize();
     const sideDir = new THREE.Vector3().crossVectors(camera.up, moveDir).normalize();
-    let s = keys.ShiftLeft ? 0.12 : 0.05;
 
     if (keys.KeyW) camera.position.addScaledVector(moveDir, s);
     if (keys.KeyS) camera.position.addScaledVector(moveDir, -s);
     if (keys.KeyA) camera.position.addScaledVector(sideDir, s);
     if (keys.KeyD) camera.position.addScaledVector(sideDir, -s);
 
-    // ПРАВКА №47: Физика камеры против стен И монстров
-    let collision = false;
-    if (physics && physics.checkCollision(camera.position.x, camera.position.z)) collision = true;
-    
-    monsters.forEach(m => {
-        if (camera.position.distanceTo(m.position) < 0.8) collision = true;
-    });
-
-    if (collision) camera.position.copy(oldP);
+    // ПРАВКА №52: Коллизии игрока
+    if (physics && physics.checkCollision(camera.position.x, camera.position.z)) camera.position.copy(oldP);
+    monsters.forEach(m => { if(camera.position.distanceTo(m.position) < 0.8) camera.position.copy(oldP); });
 
     playerLight.position.copy(camera.position);
 
     const now = Date.now();
-    isAnyMonsterAttacking = false; // Сброс очереди атак каждый кадр
-
-    monsters.forEach((m, index) => {
+    monsters.forEach(m => {
         const dist = m.position.distanceTo(camera.position);
         
-        // ПРАВКА №45: Расталкивание (чтобы не стояли в одной точке)
-        monsters.forEach((other, oIndex) => {
-            if (index !== oIndex) {
-                const d = m.position.distanceTo(other.position);
-                if (d < 1.2) {
-                    const pushDir = new THREE.Vector3().subVectors(m.position, other.position).normalize();
-                    m.position.addScaledVector(pushDir, 0.01);
-                }
-            }
-        });
+        // ПРАВКА №50: Логика зрения (FOV)
+        if (dist < 10) {
+            m.userData.state = 'chase';
+        } else {
+            m.userData.state = 'patrol';
+        }
 
-        if (dist < 15) {
-            const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
-            
-            // Движение (Правка №42)
-            if (physics && !physics.checkCollision(m.position.x + dirM.x * 0.4, m.position.z + dirM.z * 0.4)) {
-                m.position.x += dirM.x * m.userData.speed;
-                m.position.z += dirM.z * m.userData.speed;
+        if (m.userData.state === 'chase') {
+            const chaseDir = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
+            if (!physics.checkCollision(m.position.x + chaseDir.x * 0.4, m.position.z + chaseDir.z * 0.4)) {
+                m.position.x += chaseDir.x * m.userData.speed;
+                m.position.z += chaseDir.z * m.userData.speed;
             }
-
             m.lookAt(camera.position.x, 0, camera.position.z);
-
-            // ПРАВКА №46: Только один монстр атакует в секунду
-            if (dist < 1.5 && !isAnyMonsterAttacking && (now - lastDamageTime > 1200)) {
-                isAnyMonsterAttacking = true;
-                playerHP -= 15;
-                document.getElementById('hp-bar-fill').style.width = playerHP + "%";
-                document.getElementById('hp-text').innerText = playerHP + "%";
-                lastDamageTime = now;
-                document.getElementById('damage-flash').style.display = 'block';
-                setTimeout(() => { document.getElementById('damage-flash').style.display = 'none'; }, 100);
-                if (playerHP <= 0) location.reload();
+        } else {
+            // Патрулирование
+            if (!physics.checkCollision(m.position.x + m.userData.patrolDir.x * 0.4, m.position.z + m.userData.patrolDir.z * 0.4)) {
+                m.position.x += m.userData.patrolDir.x * (m.userData.speed * 0.5);
+                m.position.z += m.userData.patrolDir.z * (m.userData.speed * 0.5);
+            } else {
+                m.userData.patrolDir.set(Math.random()-0.5, 0, Math.random()-0.5).normalize();
             }
+            const lookTarget = m.position.clone().add(m.userData.patrolDir);
+            m.lookAt(lookTarget.x, 0, lookTarget.z);
+        }
+
+        if (dist < 1.3 && now - lastDamageTime > 1200) {
+            playerHP -= 15;
+            document.getElementById('hp-bar-fill').style.width = playerHP + "%";
+            document.getElementById('hp-text').innerText = playerHP + "%";
+            lastDamageTime = now;
+            document.getElementById('damage-flash').style.display = 'block';
+            setTimeout(() => { document.getElementById('damage-flash').style.display = 'none'; }, 100);
+            if (playerHP <= 0) location.reload();
         }
     });
 
