@@ -37,10 +37,9 @@ body {
     background-repeat: no-repeat;
     background-position: bottom center;
     transform-origin: bottom center;
-    transition: transform 0.1s ease-out; /* Плавный возврат */
+    transition: transform 0.1s ease-out;
 }
 
-/* Класс перезарядки: уводит пистолет вниз на 2 секунды */
 .reloading {
     transform: translateY(600px) rotate(15deg) !important;
     transition: transform 0.8s ease-in !important;
