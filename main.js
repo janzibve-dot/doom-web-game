@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Physics } from './engine/physics.js';
 
 let scene, camera, renderer, physics, playerLight;
-let monsters = [], items = [], level;
+let monsters = [], items = [], levelData;
 let health = 100, ammo = 50;
 const keys = {};
 
@@ -10,38 +10,40 @@ const keys = {};
 fetch('./levels/level1.json')
     .then(r => r.json())
     .then(data => {
-        level = data;
+        levelData = data;
         init();
     })
     .catch(err => {
-        document.body.innerHTML = "<h1 style='color:white; padding:20px;'>Ошибка JSON: " + err.message + "</h1>";
+        console.error("Ошибка загрузки JSON:", err);
+        document.body.innerHTML = "<h1 style='color:white;padding:20px;'>Ошибка JSON: " + err.message + "</h1>";
     });
 
 function init() {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x050000);
-    scene.fog = new THREE.Fog(0x050000, 1, 20);
+    scene.background = new THREE.Color(0x0a0000);
+    scene.fog = new THREE.Fog(0x0a0000, 1, 30);
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(1.5, 1.6, 1.5); // Начальная позиция
+    camera.position.set(1.5, 1.6, 1.5); 
 
     renderer = new THREE.WebGLRenderer({ antialias: false });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    physics = new Physics(level);
+    physics = new Physics(levelData);
     const loader = new THREE.TextureLoader();
 
-    // Свет
+    // Освещение
     scene.add(new THREE.AmbientLight(0xff0000, 0.1));
-    playerLight = new THREE.PointLight(0xffffff, 60, 15);
+    playerLight = new THREE.PointLight(0xffffff, 80, 15);
     scene.add(playerLight);
 
-    // Генерация карты из JSON
+    // Материалы
     const wallGeo = new THREE.BoxGeometry(1, 4, 1);
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
 
-    level.map.forEach((row, z) => {
+    // Отрисовка карты
+    levelData.map.forEach((row, z) => {
         row.forEach((cell, x) => {
             if (cell === 1) {
                 const wall = new THREE.Mesh(wallGeo, wallMat);
@@ -56,12 +58,24 @@ function init() {
     });
 
     // Пол
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+    const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(100, 100), 
+        new THREE.MeshStandardMaterial({ color: 0x111111 })
+    );
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
     // Управление
-    setupInput();
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+    window.addEventListener('mousemove', e => {
+        if (document.pointerLockElement) camera.rotation.y -= e.movementX * 0.0025;
+    });
+    window.addEventListener('click', () => {
+        if (!document.pointerLockElement) document.body.requestPointerLock();
+        else shoot();
+    });
+
     animate();
 }
 
@@ -85,32 +99,23 @@ function createItem(x, z, loader) {
     scene.add(sprite);
 }
 
-function setupInput() {
-    window.addEventListener('keydown', e => keys[e.code] = true);
-    window.addEventListener('keyup', e => keys[e.code] = false);
-    window.addEventListener('mousemove', e => {
-        if (document.pointerLockElement) camera.rotation.y -= e.movementX * 0.0025;
-    });
-    window.addEventListener('click', () => {
-        if (!document.pointerLockElement) document.body.requestPointerLock();
-        else shoot();
-    });
-}
-
 function shoot() {
     if (ammo <= 0) return;
     ammo--;
     document.getElementById('am').innerText = ammo;
-    playerLight.intensity = 400;
-    setTimeout(() => playerLight.intensity = 60, 70);
+    playerLight.intensity = 500;
+    setTimeout(() => playerLight.intensity = 80, 70);
 
     const ray = new THREE.Raycaster();
     ray.setFromCamera({ x: 0, y: 0 }, camera);
     const hits = ray.intersectObjects(monsters.map(m => m.sprite));
     if (hits.length > 0) {
-        const m = monsters.find(mon => mon.sprite === hits[0].object);
-        m.health -= 25;
-        if (m.health <= 0) { scene.remove(m.sprite); monsters = monsters.filter(mon => mon !== m); }
+        const target = monsters.find(m => m.sprite === hits[0].object);
+        target.health -= 25;
+        if (target.health <= 0) {
+            scene.remove(target.sprite);
+            monsters = monsters.filter(m => m !== target);
+        }
     }
 }
 
@@ -129,12 +134,13 @@ function animate() {
 
     if (physics.checkCollision(camera.position.x, camera.position.z)) camera.position.copy(oldP);
 
-    // Сбор предметов
+    // Сбор аптечек
     items = items.filter(it => {
         if (camera.position.distanceTo(it.sprite.position) < 1) {
             health = Math.min(100, health + 20);
             document.getElementById('hp').innerText = health;
-            scene.remove(it.sprite); return false;
+            scene.remove(it.sprite);
+            return false;
         }
         return true;
     });
