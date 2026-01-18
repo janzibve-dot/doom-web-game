@@ -1,153 +1,84 @@
 import * as THREE from 'three';
 import { Physics } from './engine/physics.js';
 
-let scene, camera, renderer, physics, playerLight;
-let monsters = [], items = [], levelData;
-let health = 100, ammo = 50;
-const keys = {};
+// ФУНКЦИЯ ДЛЯ ВЫВОДА ОШИБКИ НА ЭКРАН
+function criticalError(msg) {
+    const errorBox = document.createElement('div');
+    errorBox.style.cssText = "position:fixed; top:10px; left:10px; background:white; color:red; padding:20px; border:5px solid red; z-index:9999; font-family:serif; font-weight:bold;";
+    errorBox.innerHTML = "<h1>ОШИБКА ИГРЫ:</h1><p>" + msg + "</p><p>Проверь консоль (F12) для деталей.</p>";
+    document.body.appendChild(errorBox);
+}
 
-// Загрузка уровня
+console.log("Запуск загрузки карты...");
+
 fetch('./levels/level1.json')
-    .then(r => r.json())
+    .then(r => {
+        if (!r.ok) throw new Error("Файл level1.json не найден в папке levels! Проверь имя файла.");
+        return r.json();
+    })
     .then(data => {
-        levelData = data;
-        init();
+        console.log("Карта загружена успешно. Начинаю запуск движка...");
+        try {
+            init(data);
+        } catch (e) {
+            criticalError("Сбой в движке: " + e.message);
+        }
     })
     .catch(err => {
-        console.error("Ошибка загрузки JSON:", err);
-        document.body.innerHTML = "<h1 style='color:white;padding:20px;'>Ошибка JSON: " + err.message + "</h1>";
+        criticalError("Сбой при чтении карты: " + err.message + ". Скорее всего, в файле level1.json пропущена запятая или скобка.");
     });
 
-function init() {
-    scene = new THREE.Scene();
+function init(levelData) {
+    const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0000);
-    scene.fog = new THREE.Fog(0x0a0000, 1, 30);
-
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(1.5, 1.6, 1.5); 
 
-    renderer = new THREE.WebGLRenderer({ antialias: false });
+    const renderer = new THREE.WebGLRenderer();
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    physics = new Physics(levelData);
+    const physics = new Physics(levelData);
     const loader = new THREE.TextureLoader();
 
-    // Освещение
     scene.add(new THREE.AmbientLight(0xff0000, 0.1));
-    playerLight = new THREE.PointLight(0xffffff, 80, 15);
-    scene.add(playerLight);
+    const pLight = new THREE.PointLight(0xffffff, 80, 15);
+    scene.add(pLight);
 
-    // Материалы
     const wallGeo = new THREE.BoxGeometry(1, 4, 1);
     const wallMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
 
-    // Отрисовка карты
+    // Рисуем карту
+    if (!levelData.map) throw new Error("В файле JSON нет раздела 'map'!");
+
     levelData.map.forEach((row, z) => {
         row.forEach((cell, x) => {
             if (cell === 1) {
                 const wall = new THREE.Mesh(wallGeo, wallMat);
                 wall.position.set(x, 2, z);
                 scene.add(wall);
-            } else if (cell === 2) {
-                createMonster(x, z, loader);
-            } else if (cell === 3) {
-                createItem(x, z, loader);
             }
         });
     });
 
-    // Пол
-    const floor = new THREE.Mesh(
-        new THREE.PlaneGeometry(100, 100), 
-        new THREE.MeshStandardMaterial({ color: 0x111111 })
-    );
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({ color: 0x111111 }));
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
-    // Управление
-    window.addEventListener('keydown', e => keys[e.code] = true);
-    window.addEventListener('keyup', e => keys[e.code] = false);
+    window.addEventListener('click', () => {
+        document.body.requestPointerLock();
+    });
+
     window.addEventListener('mousemove', e => {
         if (document.pointerLockElement) camera.rotation.y -= e.movementX * 0.0025;
     });
-    window.addEventListener('click', () => {
-        if (!document.pointerLockElement) document.body.requestPointerLock();
-        else shoot();
-    });
 
-    animate();
-}
-
-function createMonster(x, z, loader) {
-    const tex = loader.load('https://raw.githubusercontent.com/pajadam/pajadam.github.io/master/doom-assets/imp_idle.png');
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
-    const sprite = new THREE.Sprite(mat);
-    sprite.position.set(x, 1.2, z);
-    sprite.scale.set(1.8, 1.8, 1);
-    monsters.push({ sprite, health: 50 });
-    scene.add(sprite);
-}
-
-function createItem(x, z, loader) {
-    const tex = loader.load('https://raw.githubusercontent.com/pajadam/pajadam.github.io/master/doom-assets/medkit.png');
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
-    const sprite = new THREE.Sprite(mat);
-    sprite.position.set(x, 0.5, z);
-    sprite.scale.set(0.7, 0.7, 1);
-    items.push({ sprite, x, z });
-    scene.add(sprite);
-}
-
-function shoot() {
-    if (ammo <= 0) return;
-    ammo--;
-    document.getElementById('am').innerText = ammo;
-    playerLight.intensity = 500;
-    setTimeout(() => playerLight.intensity = 80, 70);
-
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera({ x: 0, y: 0 }, camera);
-    const hits = ray.intersectObjects(monsters.map(m => m.sprite));
-    if (hits.length > 0) {
-        const target = monsters.find(m => m.sprite === hits[0].object);
-        target.health -= 25;
-        if (target.health <= 0) {
-            scene.remove(target.sprite);
-            monsters = monsters.filter(m => m !== target);
-        }
+    function animate() {
+        requestAnimationFrame(animate);
+        pLight.position.copy(camera.position);
+        renderer.render(scene, camera);
     }
-}
-
-function animate() {
-    requestAnimationFrame(animate);
-    const speed = 0.15;
-    const dir = new THREE.Vector3();
-    camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
-    const side = new THREE.Vector3().crossVectors(camera.up, dir).normalize();
-    const oldP = camera.position.clone();
-
-    if (keys.KeyW) camera.position.addScaledVector(dir, speed);
-    if (keys.KeyS) camera.position.addScaledVector(dir, -speed);
-    if (keys.KeyA) camera.position.addScaledVector(side, speed);
-    if (keys.KeyD) camera.position.addScaledVector(side, -speed);
-
-    if (physics.checkCollision(camera.position.x, camera.position.z)) camera.position.copy(oldP);
-
-    // Сбор аптечек
-    items = items.filter(it => {
-        if (camera.position.distanceTo(it.sprite.position) < 1) {
-            health = Math.min(100, health + 20);
-            document.getElementById('hp').innerText = health;
-            scene.remove(it.sprite);
-            return false;
-        }
-        return true;
-    });
-
-    // Поворот монстров к игроку
-    monsters.forEach(m => m.sprite.lookAt(camera.position));
-
-    playerLight.position.copy(camera.position);
-    renderer.render(scene, camera);
+    animate();
+    console.log("Движок работает!");
 }
