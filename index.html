@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Horror Labyrinth 80x80</title>
+    <title>Horror Labyrinth 80x80 - Stable</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -40,7 +40,12 @@
     </div>
 
     <script type="importmap">
-        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
     </script>
     <script type="module" src="main.js"></script>
 </body>
