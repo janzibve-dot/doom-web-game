@@ -27,7 +27,7 @@ function init() {
     scene.background = new THREE.Color(0x010101);
     scene.fog = new THREE.Fog(0x000000, 1, 15);
 
-    // Правка №4: Фикс прозрачности
+    // Правка №12: Сохранение настроек камеры (защита от прозрачности)
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
     camera.position.set(2, 1.6, 2);
     camera.rotation.order = 'YXZ'; 
@@ -40,22 +40,19 @@ function init() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // Правка №5: Позиция света
     playerLight = new THREE.PointLight(0xffffff, 1.3, 12);
     playerLight.decay = 2;
     scene.add(playerLight);
-    scene.add(new THREE.AmbientLight(0x222222, 0.15));
+    scene.add(new THREE.AmbientLight(0x404040, 0.2));
 
-    const canvas = document.createElement('canvas');
-    canvas.width = 128; canvas.height = 128;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0,0,128,128);
-    ctx.strokeStyle = '#222'; ctx.lineWidth = 4; ctx.strokeRect(0,0,128,128);
-    const wallTexture = new THREE.CanvasTexture(canvas);
-    wallTexture.wrapS = wallTexture.wrapT = THREE.RepeatWrapping;
-    wallTexture.repeat.set(1, 2);
+    const loader = new THREE.TextureLoader();
 
-    const wallMat = new THREE.MeshStandardMaterial({ map: wallTexture });
+    // Правка №10: Возврат кирпичных стен
+    const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
+    wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping;
+    wallTex.repeat.set(1, 1);
+    const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
+
     levelData.map.forEach((row, z) => {
         row.forEach((cell, x) => {
             if (cell === 1) {
@@ -66,7 +63,14 @@ function init() {
         });
     });
 
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(1000,1000), new THREE.MeshStandardMaterial({color:0x050505}));
+    // Правка №11: Возврат бетонного грязного пола
+    const floorTex = loader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg'); // Используем как основу для шума
+    const floorMat = new THREE.MeshStandardMaterial({ 
+        color: 0x222222, 
+        roughness: 0.9,
+        metalness: 0.1
+    });
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), floorMat);
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
@@ -90,10 +94,10 @@ function init() {
 }
 
 function setupBackgroundMusic() {
-    // Правка №3: Путь к файлу в корне репозитория
     bgMusicHTML = new Audio(path + 'FON1.ogg');
     bgMusicHTML.loop = true;
-    bgMusicHTML.volume = 0.35;
+    // Правка №9: Сделали музыку тише
+    bgMusicHTML.volume = 0.15; 
 }
 
 function loadSFX() {
@@ -107,7 +111,7 @@ function startGame() {
     document.getElementById('start-screen').style.display = 'none';
     document.body.requestPointerLock();
     if (listener.context.state === 'suspended') listener.context.resume();
-    bgMusicHTML.play().catch(e => console.log("Файл FON1.ogg не найден в корне"));
+    bgMusicHTML.play().catch(e => console.log("Файл FON1.ogg не найден"));
 }
 
 function spawnMonster(x, z) {
@@ -191,9 +195,8 @@ function animate() {
         camera.position.copy(oldP);
     }
 
-    // Правка №5: Свет
     playerLight.position.copy(camera.position);
-    playerLight.position.y += 0.6; 
+    playerLight.position.y += 0.5;
 
     const now = Date.now();
     monsters.forEach(m => {
