@@ -1,6 +1,21 @@
-<div id="hud">
-    <div class="stat"><span class="label">HEALTH</span><span id="hp">100</span>%</div>
-    <div class="stat"><span class="label">AMMO</span><span id="am">50</span></div>
-</div>
-<div id="crosshair"></div>
-<div id="weapon" style="background-image: url('https://raw.githubusercontent.com/pajadam/pajadam.github.io/master/doom-assets/shotgun.png');"></div>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>DOOM JS EDITION</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="hud">
+        <div class="stat"><span class="label">HEALTH</span><span id="hp">100</span>%</div>
+        <div class="stat"><span class="label">AMMO</span><span id="am">50</span></div>
+    </div>
+    <div id="crosshair"></div>
+    <div id="weapon"></div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+    </script>
+    <script type="module" src="main.js"></script>
+</body>
+</html>
