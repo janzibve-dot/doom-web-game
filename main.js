@@ -7,7 +7,6 @@ let health = 100, ammo = 100;
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false };
 let isShooting = false;
 
-// Загрузка уровня
 fetch('./levels/level1.json')
     .then(r => r.json())
     .then(data => { levelData = data; init(); });
@@ -27,12 +26,10 @@ function init() {
     physics = new Physics(levelData);
     const loader = new THREE.TextureLoader();
 
-    // Освещение фонариком
     scene.add(new THREE.AmbientLight(0x220000, 0.5));
     playerLight = new THREE.PointLight(0xffffff, 1.2, 15);
     scene.add(playerLight);
 
-    // Стены (80x80)
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
     const wallGeo = new THREE.BoxGeometry(1.05, 4, 1.05);
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
@@ -47,20 +44,23 @@ function init() {
         });
     });
 
-    // Пол
-    const floorGeo = new THREE.PlaneGeometry(2000, 2000);
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-    const floor = new THREE.Mesh(floorGeo, floorMat);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.MeshStandardMaterial({ color: 0x111111 }));
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
-    // Управление событиями
+    // Управление
     window.addEventListener('keydown', e => { if(e.code in keys) keys[e.code] = true; });
     window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
-    window.addEventListener('mousedown', () => {
-        if (document.pointerLockElement) shoot();
-        else document.body.requestPointerLock();
+    
+    // Мгновенная реакция на нажатие кнопки мыши
+    window.addEventListener('mousedown', (e) => {
+        if (document.pointerLockElement) {
+            if (e.button === 0) shoot(); // 0 - левая кнопка
+        } else {
+            document.body.requestPointerLock();
+        }
     });
+
     window.addEventListener('mousemove', e => {
         if (document.pointerLockElement) camera.rotation.y -= e.movementX * 0.002;
     });
@@ -76,21 +76,26 @@ function shoot() {
 
     const weapon = document.getElementById('weapon');
     
-    // Вспышка света и анимация отдачи (пистолет подпрыгивает)
-    playerLight.intensity = 10;
-    weapon.style.transform = "translateY(40px) scale(1.1)";
+    // Мгновенная анимация выстрела
+    playerLight.intensity = 12; // Вспышка ярче
+    weapon.style.transform = "translateY(50px) scale(1.2) rotate(-5deg)"; // Мощная отдача
 
+    // Лучевой кастинг для стрельбы (в центр экрана)
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera({ x: 0, y: 0 }, camera);
+    // Здесь позже добавим проверку попадания в монстров
+
+    // Быстрый возврат в исходное положение
     setTimeout(() => {
         playerLight.intensity = 1.2;
-        weapon.style.transform = "translateY(0) scale(1)";
+        weapon.style.transform = "translateY(0) scale(1) rotate(0deg)";
         isShooting = false;
-    }, 150);
+    }, 80); // 80 миллисекунд - очень быстрый цикл выстрела
 }
 
 function animate() {
     requestAnimationFrame(animate);
 
-    // Настройка медленной скорости (как ты просил)
     let speed = keys.ShiftLeft ? 0.12 : 0.05;
     const dir = new THREE.Vector3();
     camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
@@ -102,7 +107,6 @@ function animate() {
     if (keys.KeyA) camera.position.addScaledVector(side, speed);
     if (keys.KeyD) camera.position.addScaledVector(side, -speed);
 
-    // Проверка столкновений
     if (physics.checkCollision(camera.position.x, camera.position.z)) {
         camera.position.copy(oldP);
     }
