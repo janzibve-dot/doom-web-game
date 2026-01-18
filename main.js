@@ -20,7 +20,7 @@ function init() {
     scene.fog = new THREE.Fog(0x020000, 1, 18);
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 1000);
-    camera.position.set(1.5, 1.6, 1.5); 
+    camera.position.set(2, 1.6, 2); 
 
     renderer = new THREE.WebGLRenderer({ antialias: false });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -57,7 +57,7 @@ function init() {
         });
     });
 
-    const planeGeo = new THREE.PlaneGeometry(200, 200);
+    const planeGeo = new THREE.PlaneGeometry(400, 400); // Увеличили плоскости под размер карты
     const floor = new THREE.Mesh(planeGeo, new THREE.MeshStandardMaterial({ map: floorTex }));
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(20, 0, 20);
@@ -124,8 +124,8 @@ function shoot() {
 function animate() {
     requestAnimationFrame(animate);
 
-    // НАСТРОЙКА СКОРОСТИ
-    let currentSpeed = keys.ShiftLeft ? 0.22 : 0.09; // 0.09 - медленно, 0.22 - бег
+    // НОВЫЕ ПАРАМЕТРЫ СКОРОСТИ
+    let currentSpeed = keys.ShiftLeft ? 0.14 : 0.06; 
     
     const dir = new THREE.Vector3();
     camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
