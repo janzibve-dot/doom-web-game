@@ -1,20 +1,21 @@
-body { margin: 0; overflow: hidden; background-color: #000; }
+body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
+#hud {
+    position: absolute; bottom: 0; width: 100%; height: 60px;
+    background: #222; border-top: 3px solid #444;
+    display: flex; justify-content: space-around; align-items: center;
+    color: #ff0000; font-weight: bold; z-index: 10;
+}
+.label { font-size: 10px; color: #888; display: block; }
 #crosshair {
-    position: absolute;
-    top: 50%; left: 50%;
-    width: 12px; height: 12px;
-    border: 2px solid lime;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-    z-index: 10;
+    position: absolute; top: 50%; left: 50%;
+    width: 8px; height: 8px; border: 2px solid lime;
+    border-radius: 50%; transform: translate(-50%, -50%);
+    pointer-events: none; z-index: 5;
 }
 #weapon {
-    position: absolute;
-    bottom: 0; left: 50%;
-    transform: translateX(-50%);
-    width: 350px; height: 350px;
-    background: url('https://raw.githubusercontent.com/pajadam/pajadam.github.io/master/doom-assets/shotgun.png') no-repeat;
-    background-size: contain;
-    pointer-events: none;
-    z-index: 5;
+    position: absolute; bottom: 60px; left: 50%;
+    transform: translateX(-50%); width: 300px; height: 300px;
+    background-image: url('https://raw.githubusercontent.com/pajadam/pajadam.github.io/master/doom-assets/shotgun.png');
+    background-size: contain; background-repeat: no-repeat;
+    pointer-events: none; z-index: 2;
 }
