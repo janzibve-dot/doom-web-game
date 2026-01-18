@@ -3,15 +3,18 @@ import { Physics } from './engine/physics.js';
 
 let scene, camera, renderer, physics, playerLight;
 let levelData;
-let health = 100, ammo = 100;
-const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false };
 
+// Настройки патронов
+let pistolMag = 10;
+let pistolTotal = 120;
+let shotgunAmmo = 40;
+let isReloading = false;
+
+const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false, KeyR: false };
+let pitch = 0;
 let isShooting = false;
 let shotSound;
 const audioLoader = new THREE.AudioLoader();
-
-// Параметры обзора
-let pitch = 0; // Наклон вверх/вниз
 
 fetch('./levels/level1.json')
     .then(r => r.json())
@@ -24,7 +27,6 @@ function init() {
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 1000);
     camera.position.set(2, 1.6, 2);
-    // Важно: порядок вращения YXZ, чтобы Y (поворот) и X (наклон) не конфликтовали
     camera.rotation.order = 'YXZ'; 
 
     const listener = new THREE.AudioListener();
@@ -65,7 +67,10 @@ function init() {
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
-    window.addEventListener('keydown', e => { if(e.code in keys) keys[e.code] = true; });
+    window.addEventListener('keydown', e => { 
+        if(e.code in keys) keys[e.code] = true; 
+        if(e.code === 'KeyR') reloadPistol();
+    });
     window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
     
     window.addEventListener('mousedown', (e) => {
@@ -76,36 +81,65 @@ function init() {
         }
     });
 
-    // ПОЛНЫЙ ОБЗОР: ВЛЕВО/ВПРАВО И ВВЕРХ/ВНИЗ
     window.addEventListener('mousemove', e => {
         if (document.pointerLockElement) {
-            // Поворот влево-вправо (Yaw)
             camera.rotation.y -= e.movementX * 0.002;
-
-            // Наклон вверх-вниз (Pitch)
             pitch -= e.movementY * 0.002;
-            
-            // Ограничение наклона: примерно 80 градусов вверх и вниз
             pitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitch));
             camera.rotation.x = pitch;
-
-            // Двигаем пистолет вслед за взглядом (эффект параллакса)
-            const weapon = document.getElementById('weapon');
-            const weaponTilt = pitch * 20; // Величина смещения пистолета
-            if (!isShooting) {
-                weapon.style.transform = `translateY(${weaponTilt}px)`;
-            }
+            updateWeaponPosition();
         }
     });
 
     animate();
 }
 
+function updateWeaponPosition(offsetY = 0) {
+    const weapon = document.getElementById('weapon');
+    if (!isReloading) {
+        weapon.style.transform = `translateY(${pitch * 20 + offsetY}px)`;
+    }
+}
+
+function reloadPistol() {
+    if (isReloading || pistolMag === 10 || pistolTotal <= 0) return;
+    
+    isReloading = true;
+    const weapon = document.getElementById('weapon');
+    weapon.classList.add('reloading');
+
+    // Общее время перезарядки 2 секунды (2000мс)
+    setTimeout(() => {
+        let needed = 10 - pistolMag;
+        let toReload = Math.min(needed, pistolTotal);
+        
+        pistolMag += toReload;
+        pistolTotal -= toReload;
+
+        document.getElementById('mag').innerText = pistolMag;
+        document.getElementById('total-ammo').innerText = pistolTotal;
+
+        weapon.classList.remove('reloading');
+        
+        setTimeout(() => {
+            isReloading = false;
+            updateWeaponPosition();
+        }, 600); // Время на подъем оружия
+
+    }, 1400); // Время нахождения внизу
+}
+
 function shoot() {
-    if (isShooting || ammo <= 0) return;
+    if (isShooting || isReloading) return;
+
+    if (pistolMag <= 0) {
+        reloadPistol();
+        return;
+    }
+
     isShooting = true;
-    ammo--;
-    document.getElementById('am').innerText = ammo;
+    pistolMag--;
+    document.getElementById('mag').innerText = pistolMag;
 
     if (shotSound.buffer) {
         if (shotSound.isPlaying) shotSound.stop();
@@ -114,17 +148,17 @@ function shoot() {
 
     const weapon = document.getElementById('weapon');
     playerLight.intensity = 15;
-
-    // Анимация отдачи с учетом текущего наклона
-    const currentTilt = pitch * 20;
+    
     weapon.style.transition = "none";
-    weapon.style.transform = `translateY(${currentTilt + 60}px) scale(1.1) rotate(-5deg)`;
+    weapon.style.transform = `translateY(${pitch * 20 + 70}px) scale(1.1) rotate(-5deg)`;
 
     setTimeout(() => {
         playerLight.intensity = 1.2;
         weapon.style.transition = "transform 0.1s ease-out";
-        weapon.style.transform = `translateY(${pitch * 20}px) scale(1) rotate(0deg)`;
+        updateWeaponPosition();
         isShooting = false;
+        
+        if (pistolMag === 0) reloadPistol();
     }, 80);
 }
 
@@ -134,10 +168,8 @@ function animate() {
     let speed = keys.ShiftLeft ? 0.12 : 0.05;
     const dir = new THREE.Vector3();
     camera.getWorldDirection(dir); 
-    // Для ходьбы убираем Y, чтобы не взлетать, если смотрим вверх
     const moveDir = dir.clone();
-    moveDir.y = 0; 
-    moveDir.normalize();
+    moveDir.y = 0; moveDir.normalize();
     
     const side = new THREE.Vector3().crossVectors(camera.up, moveDir).normalize();
     const oldP = camera.position.clone();
