@@ -48,14 +48,12 @@ function init() {
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
-    // Управление
     window.addEventListener('keydown', e => { if(e.code in keys) keys[e.code] = true; });
     window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
     
-    // Мгновенная реакция на нажатие кнопки мыши
     window.addEventListener('mousedown', (e) => {
         if (document.pointerLockElement) {
-            if (e.button === 0) shoot(); // 0 - левая кнопка
+            if (e.button === 0) shoot();
         } else {
             document.body.requestPointerLock();
         }
@@ -76,21 +74,18 @@ function shoot() {
 
     const weapon = document.getElementById('weapon');
     
-    // Мгновенная анимация выстрела
-    playerLight.intensity = 12; // Вспышка ярче
-    weapon.style.transform = "translateY(50px) scale(1.2) rotate(-5deg)"; // Мощная отдача
+    // Вспышка и отдача (настроена под размер 600px)
+    playerLight.intensity = 12;
+    weapon.style.transform = "translateY(60px) scale(1.05) rotate(-3deg)"; 
 
-    // Лучевой кастинг для стрельбы (в центр экрана)
     const ray = new THREE.Raycaster();
     ray.setFromCamera({ x: 0, y: 0 }, camera);
-    // Здесь позже добавим проверку попадания в монстров
 
-    // Быстрый возврат в исходное положение
     setTimeout(() => {
         playerLight.intensity = 1.2;
         weapon.style.transform = "translateY(0) scale(1) rotate(0deg)";
         isShooting = false;
-    }, 80); // 80 миллисекунд - очень быстрый цикл выстрела
+    }, 80); 
 }
 
 function animate() {
