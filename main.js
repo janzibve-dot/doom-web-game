@@ -9,6 +9,9 @@ let monsters = [], mixers = [], clock = new THREE.Clock();
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, KeyR: false };
 let pitch = 0;
 
+// Глобальный контроль атак (Правка №46)
+let isAnyMonsterAttacking = false;
+
 const minimapCanvas = document.getElementById('minimap');
 const minimapCtx = minimapCanvas.getContext('2d');
 
@@ -77,15 +80,8 @@ function init() {
     });
     window.addEventListener('mousedown', () => { if (document.pointerLockElement) shoot(); });
 
-    // ПРАВКА №43: Создаем 15 монстров сразу
-    spawnWave(15);
+    for(let i=0; i<15; i++) { spawnNewMonster(); }
     animate();
-}
-
-function spawnWave(count) {
-    for (let i = 0; i < count; i++) {
-        spawnNewMonster();
-    }
 }
 
 function findSafeSpawn() {
@@ -93,7 +89,7 @@ function findSafeSpawn() {
     while (attempts < 300) {
         let x = Math.floor(Math.random() * levelData.map[0].length);
         let z = Math.floor(Math.random() * levelData.map.length);
-        if (levelData.map[z][x] === 0 && Math.abs(x - camera.position.x) > 8) {
+        if (levelData.map[z][x] === 0 && Math.abs(x - camera.position.x) > 10) {
             return { x: x + 0.5, z: z + 0.5 };
         }
         attempts++;
@@ -115,21 +111,19 @@ function spawnNewMonster() {
         let mixer = null;
         if (gltf.animations.length > 0) {
             mixer = new THREE.AnimationMixer(model);
-            const clip = gltf.animations[0];
-            
-            // ПРАВКА №44: Обрезка последних 5 секунд анимации падения
-            const action = mixer.clipAction(clip);
-            const duration = clip.duration > 5 ? clip.duration - 5 : clip.duration;
-            action.setDuration(duration); // Принудительно ускоряем/обрезаем цикл
+            const action = mixer.clipAction(gltf.animations[0]);
+            // ПРАВКА №48: Цикл только первых 3 секунд
+            action.setDuration(3); 
+            action.setLoop(THREE.LoopRepeat);
             action.play();
             mixers.push(mixer);
         }
         
-        // ПРАВКА №42: Увеличена скорость монстров
         model.userData = { 
             health: 100, 
-            speed: 0.04 + Math.random() * 0.02, 
-            mixer: mixer 
+            speed: 0.03 + Math.random() * 0.02, 
+            mixer: mixer,
+            radius: 0.6 // Для расталкивания
         };
         monsters.push(model);
     });
@@ -157,7 +151,6 @@ function shoot() {
                 monsters = monsters.filter(m => m !== target);
                 kills++;
                 document.getElementById('kill-counter').innerText = "УБИТО: " + kills;
-                // Сразу спавним нового взамен убитого
                 spawnNewMonster();
             }
         }
@@ -167,7 +160,7 @@ function shoot() {
     setTimeout(() => { weapon.style.transform = `translateY(${pitch * 25}px)`; isShooting = false; if (pistolMag === 0) reloadPistol(); }, 100);
 }
 
-// ... Остальные функции (reloadPistol, setupBackgroundMusic, drawMinimap и т.д.) без изменений ...
+// ... вспомогательные функции (reloadPistol, setupBackgroundMusic, loadSFX, startGame, drawMinimap) без изменений ...
 
 function reloadPistol() {
     if (isReloading || pistolMag === 10 || pistolTotal <= 0) return;
@@ -221,7 +214,7 @@ function drawMinimap() {
     minimapCtx.fillStyle = "#f00";
     monsters.forEach(m => {
         const dx = centerX + (m.position.x - camera.position.x) * zoom;
-        const dz = centerY + (m.position.z - camera.position.z) * zoom;
+        const dz = centerY + (z - camera.position.z) * zoom;
         minimapCtx.beginPath(); minimapCtx.arc(dx, dz, 3, 0, Math.PI * 2); minimapCtx.fill();
     });
     minimapCtx.save();
@@ -248,32 +241,49 @@ function animate() {
     if (keys.KeyA) camera.position.addScaledVector(sideDir, s);
     if (keys.KeyD) camera.position.addScaledVector(sideDir, -s);
 
-    if (physics && physics.checkCollision(camera.position.x, camera.position.z)) {
-        camera.position.copy(oldP);
-    }
+    // ПРАВКА №47: Физика камеры против стен И монстров
+    let collision = false;
+    if (physics && physics.checkCollision(camera.position.x, camera.position.z)) collision = true;
+    
+    monsters.forEach(m => {
+        if (camera.position.distanceTo(m.position) < 0.8) collision = true;
+    });
+
+    if (collision) camera.position.copy(oldP);
 
     playerLight.position.copy(camera.position);
 
     const now = Date.now();
-    monsters.forEach(m => {
-        const dist = m.position.distanceTo(camera.position);
-        if (dist < 15) {
-            // ПРАВКА №42: Умная навигация и повышенная скорость
-            const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
-            let moveX = dirM.x * m.userData.speed;
-            let moveZ = dirM.z * m.userData.speed;
+    isAnyMonsterAttacking = false; // Сброс очереди атак каждый кадр
 
-            // Проверка коллизий для "плавного" обхода углов
-            if (physics && !physics.checkCollision(m.position.x + moveX + Math.sign(moveX)*0.4, m.position.z)) {
-                m.position.x += moveX;
+    monsters.forEach((m, index) => {
+        const dist = m.position.distanceTo(camera.position);
+        
+        // ПРАВКА №45: Расталкивание (чтобы не стояли в одной точке)
+        monsters.forEach((other, oIndex) => {
+            if (index !== oIndex) {
+                const d = m.position.distanceTo(other.position);
+                if (d < 1.2) {
+                    const pushDir = new THREE.Vector3().subVectors(m.position, other.position).normalize();
+                    m.position.addScaledVector(pushDir, 0.01);
+                }
             }
-            if (physics && !physics.checkCollision(m.position.x, m.position.z + moveZ + Math.sign(moveZ)*0.4)) {
-                m.position.z += moveZ;
+        });
+
+        if (dist < 15) {
+            const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
+            
+            // Движение (Правка №42)
+            if (physics && !physics.checkCollision(m.position.x + dirM.x * 0.4, m.position.z + dirM.z * 0.4)) {
+                m.position.x += dirM.x * m.userData.speed;
+                m.position.z += dirM.z * m.userData.speed;
             }
 
             m.lookAt(camera.position.x, 0, camera.position.z);
 
-            if (dist < 1.3 && now - lastDamageTime > 1000) {
+            // ПРАВКА №46: Только один монстр атакует в секунду
+            if (dist < 1.5 && !isAnyMonsterAttacking && (now - lastDamageTime > 1200)) {
+                isAnyMonsterAttacking = true;
                 playerHP -= 15;
                 document.getElementById('hp-bar-fill').style.width = playerHP + "%";
                 document.getElementById('hp-text').innerText = playerHP + "%";
