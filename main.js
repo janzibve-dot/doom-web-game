@@ -10,6 +10,10 @@ let monsters = [], mixers = [], clock = new THREE.Clock();
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, KeyR: false, ShiftLeft: false };
 let pitch = 0, isGameStarted = false, isDead = false, gameStartTime = 0;
 
+const minimapCanvas = document.getElementById('minimap');
+const minimapCtx = minimapCanvas.getContext('2d');
+minimapCanvas.width = 160; minimapCanvas.height = 160;
+
 let shotSound, reloadSound, bgMusicHTML, heartbeatSound, flickerSound;
 const audioLoader = new THREE.AudioLoader();
 const listener = new THREE.AudioListener();
@@ -20,7 +24,7 @@ window.addEventListener('DOMContentLoaded', () => {
         levelData = data; 
         physics = new Physics(levelData);
         init(); 
-    }).catch(e => console.error("Ошибка загрузки данных уровня:", e));
+    });
 });
 
 function init() {
@@ -33,13 +37,8 @@ function init() {
     camera.rotation.order = 'YXZ'; 
     camera.add(listener);
 
-    renderer = new THREE.WebGLRenderer({ 
-        antialias: true, 
-        logarithmicDepthBuffer: true,
-        precision: "highp" 
-    });
+    renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, precision: "highp" });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     document.body.appendChild(renderer.domElement);
 
     loadAllSounds();
@@ -109,9 +108,7 @@ function spawnRandomMonster() {
     new GLTFLoader().load(path + 'assets/sprites/models/monster.glb', (gltf) => {
         const model = gltf.scene;
         model.position.set(rx, 0, rz);
-        // МОНСТР ТЕПЕРЬ РОСТОМ С ИГРОКА (Масштаб 1.0)
         model.scale.set(1.0, 1.0, 1.0);
-        
         scene.add(model);
         if (gltf.animations.length > 0) {
             const mixer = new THREE.AnimationMixer(model);
@@ -122,6 +119,39 @@ function spawnRandomMonster() {
         model.userData = { health: 100, speed: 0.046 };
         monsters.push(model);
     });
+}
+
+function updateMinimap() {
+    minimapCtx.fillStyle = '#000';
+    minimapCtx.fillRect(0, 0, 160, 160);
+
+    const scale = 2; // Масштаб отображения сектора вокруг игрока
+    const offsetX = camera.position.x;
+    const offsetZ = camera.position.z;
+
+    // Отрисовка стен
+    minimapCtx.fillStyle = '#300';
+    levelData.map.forEach((row, z) => {
+        row.forEach((cell, x) => {
+            if (cell === 1) {
+                minimapCtx.fillRect(80 + (x - offsetX) * scale, 80 + (z - offsetZ) * scale, scale, scale);
+            }
+        });
+    });
+
+    // Отрисовка монстров
+    minimapCtx.fillStyle = '#f00';
+    monsters.forEach(m => {
+        minimapCtx.beginPath();
+        minimapCtx.arc(80 + (m.position.x - offsetX) * scale, 80 + (m.position.z - offsetZ) * scale, 2, 0, Math.PI * 2);
+        minimapCtx.fill();
+    });
+
+    // Отрисовка игрока
+    minimapCtx.fillStyle = '#0f0';
+    minimapCtx.beginPath();
+    minimapCtx.arc(80, 80, 3, 0, Math.PI * 2);
+    minimapCtx.fill();
 }
 
 function animate() {
@@ -147,7 +177,6 @@ function animate() {
     if (keys.KeyD) camera.position.addScaledVector(sideDir, -s);
 
     if (physics && physics.checkCollision(camera.position.x, camera.position.z)) camera.position.copy(oldP);
-    // Коллизия с монстром уменьшена под новый масштаб
     monsters.forEach(m => { if(camera.position.distanceTo(m.position) < 0.75) camera.position.copy(oldP); });
 
     playerLight.position.copy(camera.position);
@@ -189,6 +218,8 @@ function animate() {
         if (flickerSound && flickerSound.buffer) flickerSound.setVolume(0);
         playerLight.intensity = 6;
     }
+    
+    updateMinimap();
     renderer.render(scene, camera);
 }
 
