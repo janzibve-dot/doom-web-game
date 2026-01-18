@@ -14,7 +14,6 @@ body {
 
 .label { font-size: 12px; color: #888; display: block; margin-bottom: 5px; }
 
-/* Полоска здоровья */
 .hp-bar-bg {
     width: 200px; height: 15px; background: #300;
     border: 1px solid #600; position: relative;
