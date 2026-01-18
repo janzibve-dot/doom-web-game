@@ -18,10 +18,13 @@ let shotSound, reloadSound, bgMusic;
 const audioLoader = new THREE.AudioLoader();
 const listener = new THREE.AudioListener();
 
-// Используем относительный путь для загрузки уровня
-fetch('./levels/level1.json')
+// Автоматическое определение базового пути для GitHub Pages
+const baseUrl = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+
+fetch(baseUrl + 'levels/level1.json')
     .then(r => r.json())
-    .then(data => { levelData = data; init(); });
+    .then(data => { levelData = data; init(); })
+    .catch(err => console.error("Ошибка загрузки уровня:", err));
 
 function init() {
     scene = new THREE.Scene();
@@ -33,25 +36,25 @@ function init() {
     camera.rotation.order = 'YXZ'; 
     camera.add(listener);
 
-    // Исправленные пути к аудио
+    // Звуки с динамическими путями
     bgMusic = new THREE.Audio(listener);
-    audioLoader.load('./audio/music/fon.mp3', (buffer) => {
+    audioLoader.load(baseUrl + 'audio/music/fon.mp3', (buffer) => {
         bgMusic.setBuffer(buffer);
         bgMusic.setLoop(true);
         bgMusic.setVolume(0.15);
-    }, undefined, (err) => console.error("Музыка не найдена по пути ./audio/music/fon.mp3"));
+    }, undefined, (err) => console.log("Музыка fon.mp3 не найдена в audio/music/"));
 
     shotSound = new THREE.Audio(listener);
-    audioLoader.load('./audio/sfx/shot.mp3', (buffer) => {
+    audioLoader.load(baseUrl + 'audio/sfx/shot.mp3', (buffer) => {
         shotSound.setBuffer(buffer);
         shotSound.setVolume(0.8);
-    }, undefined, (err) => console.error("Звук выстрела не найден по пути ./audio/sfx/shot.mp3"));
+    });
 
     reloadSound = new THREE.Audio(listener);
-    audioLoader.load('./audio/sfx/reload.mp3', (buffer) => {
+    audioLoader.load(baseUrl + 'audio/sfx/reload.mp3', (buffer) => {
         reloadSound.setBuffer(buffer);
         reloadSound.setVolume(0.6);
-    }, undefined, (err) => console.error("Звук перезарядки не найден по пути ./audio/sfx/reload.mp3"));
+    });
 
     renderer = new THREE.WebGLRenderer({ antialias: false });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -117,8 +120,7 @@ function init() {
 
 function spawnMonster(x, z) {
     const loader = new THREE.TextureLoader();
-    // Исправленный путь к спрайту
-    loader.load('./assets/sprites/monster.png', (texture) => {
+    loader.load(baseUrl + 'assets/sprites/monster.png', (texture) => {
         const spriteMat = new THREE.SpriteMaterial({ map: texture });
         const monster = new THREE.Sprite(spriteMat);
         monster.position.set(x, 1, z);
@@ -126,7 +128,7 @@ function spawnMonster(x, z) {
         monster.userData = { health: 50, speed: 0.015 };
         scene.add(monster);
         monsters.push(monster);
-    }, undefined, (err) => console.error("Спрайт монстра не найден по пути ./assets/sprites/monster.png"));
+    }, undefined, (err) => console.log("Спрайт monster.png не найден в assets/sprites/"));
 }
 
 function updateWeaponPosition() {
