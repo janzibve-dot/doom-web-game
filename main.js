@@ -4,7 +4,7 @@ import { Physics } from './engine/physics.js';
 let scene, camera, renderer, physics, playerLight;
 let monsters = [], items = [], levelData;
 let health = 100, ammo = 50;
-const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false };
+const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false };
 
 fetch('./levels/level1.json')
     .then(r => r.json())
@@ -19,7 +19,6 @@ function init() {
     scene.background = new THREE.Color(0x020000);
     scene.fog = new THREE.Fog(0x020000, 1, 18);
 
-    // ИСПРАВЛЕНИЕ: Near plane = 0.05. Теперь стены не исчезают перед носом!
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 1000);
     camera.position.set(1.5, 1.6, 1.5); 
 
@@ -30,21 +29,17 @@ function init() {
     physics = new Physics(levelData);
     const loader = new THREE.TextureLoader();
 
-    // Загрузка текстур
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
-    wallTex.magFilter = THREE.NearestFilter; // Делаем текстуру "пиксельной" как в Doom
+    wallTex.magFilter = THREE.NearestFilter; 
     
     const floorTex = loader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
     floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
     floorTex.repeat.set(100, 100);
 
-    // Мягкий свет
     scene.add(new THREE.AmbientLight(0x220000, 0.5)); 
     playerLight = new THREE.PointLight(0xffffff, 1.2, 12);
     scene.add(playerLight);
 
-    // СОЗДАНИЕ СТЕН (без дыр)
-    // Размер 1.05 чтобы блоки плотно смыкались
     const wallGeo = new THREE.BoxGeometry(1.05, 4, 1.05);
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
 
@@ -62,9 +57,7 @@ function init() {
         });
     });
 
-    // ЕДИНЫЙ ПОЛ И ПОТОЛОК (накрывают всё)
     const planeGeo = new THREE.PlaneGeometry(200, 200);
-    
     const floor = new THREE.Mesh(planeGeo, new THREE.MeshStandardMaterial({ map: floorTex }));
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(20, 0, 20);
@@ -75,7 +68,6 @@ function init() {
     ceil.position.set(20, 4, 20);
     scene.add(ceil);
 
-    // Управление
     window.addEventListener('keydown', e => { if(e.code in keys) keys[e.code] = true; });
     window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
     window.addEventListener('mousedown', () => {
@@ -132,19 +124,19 @@ function shoot() {
 function animate() {
     requestAnimationFrame(animate);
 
-    const speed = 0.12;
+    // НАСТРОЙКА СКОРОСТИ
+    let currentSpeed = keys.ShiftLeft ? 0.22 : 0.09; // 0.09 - медленно, 0.22 - бег
+    
     const dir = new THREE.Vector3();
     camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
     const side = new THREE.Vector3().crossVectors(camera.up, dir).normalize();
     const oldP = camera.position.clone();
 
-    if (keys.KeyW) camera.position.addScaledVector(dir, speed);
-    if (keys.KeyS) camera.position.addScaledVector(dir, -speed);
-    if (keys.KeyA) camera.position.addScaledVector(side, speed);
-    if (keys.KeyD) camera.position.addScaledVector(side, -speed);
+    if (keys.KeyW) camera.position.addScaledVector(dir, currentSpeed);
+    if (keys.KeyS) camera.position.addScaledVector(dir, -currentSpeed);
+    if (keys.KeyA) camera.position.addScaledVector(side, currentSpeed);
+    if (keys.KeyD) camera.position.addScaledVector(side, -currentSpeed);
 
-    // УЛУЧШЕННАЯ ПРОВЕРКА КОЛЛИЗИЙ
-    // Проверяем точку чуть впереди игрока (0.3), чтобы камера не входила в стену
     const checkX = camera.position.x + (camera.position.x > oldP.x ? 0.3 : -0.3);
     const checkZ = camera.position.z + (camera.position.z > oldP.z ? 0.3 : -0.3);
     
