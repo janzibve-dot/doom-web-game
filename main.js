@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Physics } from './engine/physics.js';
 
-let scene, camera, renderer, physics, playerLight;
+let scene, camera, renderer, physics, playerLight, ambientLight;
 let levelData;
 let playerHP = 100, pistolMag = 10, pistolTotal = 120;
 let isReloading = false, isShooting = false, lastDamageTime = 0;
@@ -13,7 +13,7 @@ let shotSound, reloadSound, bgMusic;
 const audioLoader = new THREE.AudioLoader();
 const listener = new THREE.AudioListener();
 
-// Базовый путь
+// Определение пути для GitHub Pages
 const path = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
 
 fetch(path + 'levels/level1.json')
@@ -26,48 +26,58 @@ fetch(path + 'levels/level1.json')
 
 function init() {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x050000);
-    scene.fog = new THREE.Fog(0x050000, 1, 25);
+    scene.background = new THREE.Color(0x010101);
+    scene.fog = new THREE.Fog(0x010101, 1, 20);
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(2, 1.6, 2);
     camera.rotation.order = 'YXZ'; 
     camera.add(listener);
 
-    // Загрузка аудио
+    // Аудио секция
     bgMusic = new THREE.Audio(listener);
     audioLoader.load(path + 'audio/music/fon.mp3', (buffer) => {
         bgMusic.setBuffer(buffer);
         bgMusic.setLoop(true);
-        bgMusic.setVolume(0.25);
+        bgMusic.setVolume(0.3);
     });
 
     shotSound = new THREE.Audio(listener);
     audioLoader.load(path + 'audio/sfx/shot.mp3', (buffer) => {
         shotSound.setBuffer(buffer);
-        shotSound.setVolume(1.0);
+        shotSound.setVolume(0.8);
     });
 
     reloadSound = new THREE.Audio(listener);
     audioLoader.load(path + 'audio/sfx/reload.mp3', (buffer) => {
         reloadSound.setBuffer(buffer);
-        reloadSound.setVolume(0.8);
+        reloadSound.setVolume(0.6);
     });
 
     renderer = new THREE.WebGLRenderer({ antialias: false });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    scene.add(new THREE.AmbientLight(0xff0000, 0.1)); // Красное свечение
-    playerLight = new THREE.PointLight(0xffffff, 1.5, 12);
+    // Улучшенное освещение
+    ambientLight = new THREE.AmbientLight(0xffffff, 0.05); // Очень слабый общий свет
+    scene.add(ambientLight);
+
+    playerLight = new THREE.PointLight(0xffffff, 2.5, 15); // Мощный фонарик
+    playerLight.decay = 2;
     scene.add(playerLight);
 
-    // Отрисовка стен БЕЗ внешних текстур (чтобы не было белых пятен)
+    // Генерация текстуры стен программно (чтобы не зависеть от файлов)
+    const canvas = document.createElement('canvas');
+    canvas.width = 64; canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#333'; ctx.fillRect(0,0,64,64);
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 4; ctx.strokeRect(0,0,64,64);
+    const wallTexture = new THREE.CanvasTexture(canvas);
+    wallTexture.wrapS = wallTexture.wrapT = THREE.RepeatWrapping;
+    wallTexture.repeat.set(1, 4);
+
+    const wallMat = new THREE.MeshStandardMaterial({ map: wallTexture });
     const wallGeo = new THREE.BoxGeometry(1, 4, 1);
-    const wallMat = new THREE.MeshStandardMaterial({ 
-        color: 0x444444, // Серый кирпич
-        roughness: 0.9
-    });
 
     levelData.map.forEach((row, z) => {
         row.forEach((cell, x) => {
@@ -81,14 +91,25 @@ function init() {
 
     // Пол
     const floor = new THREE.Mesh(
-        new THREE.PlaneGeometry(1000, 1000), 
-        new THREE.MeshStandardMaterial({ color: 0x111111 })
+        new THREE.PlaneGeometry(2000, 2000), 
+        new THREE.MeshStandardMaterial({ color: 0x050505 })
     );
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
-    // Клик для старта
-    document.getElementById('start-screen').addEventListener('click', startAudio);
+    // Старт игры
+    document.getElementById('start-screen').addEventListener('click', () => {
+        document.getElementById('start-screen').style.display = 'none';
+        document.body.requestPointerLock();
+        
+        if (listener.context.state === 'suspended') {
+            listener.context.resume().then(() => {
+                if (bgMusic.buffer) bgMusic.play();
+            });
+        } else {
+            if (bgMusic.buffer) bgMusic.play();
+        }
+    });
 
     window.addEventListener('keydown', e => { 
         if(e.code in keys) keys[e.code] = true; 
@@ -98,8 +119,8 @@ function init() {
     window.addEventListener('mousedown', () => { if (document.pointerLockElement) shoot(); });
     window.addEventListener('mousemove', e => {
         if (document.pointerLockElement) {
-            camera.rotation.y -= e.movementX * 0.0022;
-            pitch -= e.movementY * 0.0022;
+            camera.rotation.y -= e.movementX * 0.002;
+            pitch -= e.movementY * 0.002;
             pitch = Math.max(-1.4, Math.min(1.4, pitch));
             camera.rotation.x = pitch;
             updateWeaponPosition();
@@ -111,27 +132,14 @@ function init() {
     animate();
 }
 
-function startAudio() {
-    document.getElementById('start-screen').style.display = 'none';
-    document.body.requestPointerLock();
-    
-    if (listener.context.state === 'suspended') {
-        listener.context.resume().then(() => {
-            if (bgMusic.buffer && !bgMusic.isPlaying) bgMusic.play();
-        });
-    } else {
-        if (bgMusic.buffer && !bgMusic.isPlaying) bgMusic.play();
-    }
-}
-
 function spawnMonster(x, z) {
     const loader = new THREE.TextureLoader();
     loader.load(path + 'assets/sprites/monster.png', (texture) => {
-        const spriteMat = new THREE.SpriteMaterial({ map: texture, color: 0xffffff });
+        const spriteMat = new THREE.SpriteMaterial({ map: texture });
         const monster = new THREE.Sprite(spriteMat);
         monster.position.set(x, 1.2, z);
-        monster.scale.set(2.2, 2.2, 1);
-        monster.userData = { health: 50, speed: 0.018 };
+        monster.scale.set(2, 2, 1);
+        monster.userData = { health: 50, speed: 0.015 };
         scene.add(monster);
         monsters.push(monster);
     });
@@ -140,7 +148,7 @@ function spawnMonster(x, z) {
 function updateWeaponPosition() {
     const weapon = document.getElementById('weapon');
     if (!isReloading) {
-        weapon.style.transform = `translateY(${pitch * 30}px)`;
+        weapon.style.transform = `translateY(${pitch * 25}px)`;
     }
 }
 
@@ -161,10 +169,7 @@ function reloadPistol() {
 }
 
 function shoot() {
-    if (isShooting || isReloading || pistolMag <= 0) {
-        if (pistolMag <= 0) reloadPistol();
-        return;
-    }
+    if (isShooting || isReloading || pistolMag <= 0) return;
     isShooting = true;
     pistolMag--;
     document.getElementById('mag').innerText = pistolMag;
@@ -188,14 +193,14 @@ function shoot() {
 
     const weapon = document.getElementById('weapon');
     weapon.style.transition = "none";
-    weapon.style.transform = `translateY(${pitch * 30 + 85}px) scale(1.15) rotate(-4deg)`;
+    weapon.style.transform = `translateY(${pitch * 25 + 80}px) scale(1.1) rotate(-4deg)`;
     
     setTimeout(() => {
         weapon.style.transition = "transform 0.1s ease-out";
         updateWeaponPosition();
         isShooting = false;
         if (pistolMag === 0) reloadPistol();
-    }, 75);
+    }, 70);
 }
 
 function animate() {
@@ -207,14 +212,13 @@ function animate() {
     const moveDir = dir.clone().setY(0).normalize();
     const sideDir = new THREE.Vector3().crossVectors(camera.up, moveDir).normalize();
     
-    let s = keys.ShiftLeft ? 0.13 : 0.06;
+    let s = keys.ShiftLeft ? 0.12 : 0.05;
 
     if (keys.KeyW) camera.position.addScaledVector(moveDir, s);
     if (keys.KeyS) camera.position.addScaledVector(moveDir, -s);
     if (keys.KeyA) camera.position.addScaledVector(sideDir, s);
     if (keys.KeyD) camera.position.addScaledVector(sideDir, -s);
 
-    // Жесткая проверка коллизий
     if (physics && physics.checkCollision(camera.position.x, camera.position.z)) {
         camera.position.copy(oldP);
     }
@@ -236,11 +240,9 @@ function animate() {
                 document.getElementById('hp-bar-fill').style.width = playerHP + "%";
                 document.getElementById('hp-text').innerText = playerHP + "%";
                 lastDamageTime = now;
-                
                 const flash = document.getElementById('damage-flash');
                 flash.style.display = 'block';
                 setTimeout(() => flash.style.display = 'none', 100);
-                
                 if (playerHP <= 0) location.reload();
             }
         }
