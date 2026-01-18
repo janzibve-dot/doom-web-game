@@ -28,7 +28,7 @@ function init() {
     scene.background = new THREE.Color(0x010101);
     scene.fog = new THREE.Fog(0x000000, 1, 15);
 
-    // ИСПРАВЛЕНИЕ 1: Near plane установлен на 0.01, чтобы стены не исчезали вблизи
+    // Правка №4: Решение проблемы прозрачности
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
     camera.position.set(2, 1.6, 2);
     camera.rotation.order = 'YXZ'; 
@@ -41,13 +41,12 @@ function init() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // ИСПРАВЛЕНИЕ 2: Свет отодвинут от центра камеры и имеет меньшую интенсивность
+    // Правка №5: Корректный свет
     playerLight = new THREE.PointLight(0xffffff, 1.5, 12);
     playerLight.decay = 2;
     scene.add(playerLight);
     scene.add(new THREE.AmbientLight(0x222222, 0.2));
 
-    // Стены с четкой сеткой
     const canvas = document.createElement('canvas');
     canvas.width = 128; canvas.height = 128;
     const ctx = canvas.getContext('2d');
@@ -94,7 +93,8 @@ function init() {
 }
 
 function setupBackgroundMusic() {
-    bgMusicHTML = new Audio(path + 'audio/music/FON1.mp3');
+    // Правка №3: Использование .ogg формата
+    bgMusicHTML = new Audio(path + 'audio/music/FON1.ogg');
     bgMusicHTML.loop = true;
     bgMusicHTML.volume = 0.3;
 }
@@ -110,7 +110,7 @@ function startGame() {
     document.getElementById('start-screen').style.display = 'none';
     document.body.requestPointerLock();
     if (listener.context.state === 'suspended') listener.context.resume();
-    bgMusicHTML.play().catch(() => console.log("Музыка FON1.mp3 не найдена"));
+    bgMusicHTML.play().catch(() => console.log("Файл FON1.ogg не найден"));
 }
 
 function spawnMonster(x, z) {
@@ -194,7 +194,6 @@ function animate() {
         camera.position.copy(oldP);
     }
 
-    // ИСПРАВЛЕНИЕ 3: Позиция света чуть выше камеры, чтобы не слепить стену перед лицом
     playerLight.position.copy(camera.position);
     playerLight.position.y += 0.5;
 
@@ -205,7 +204,7 @@ function animate() {
             const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
             m.position.x += dirM.x * m.userData.speed;
             m.position.z += dirM.z * m.userData.speed;
-            if (dist < 1.3 && now - lastDamageTime > 1200) {
+            if (dist < 1.2 && now - lastDamageTime > 1200) {
                 playerHP -= 20;
                 document.getElementById('hp-bar-fill').style.width = playerHP + "%";
                 document.getElementById('hp-text').innerText = playerHP + "%";
