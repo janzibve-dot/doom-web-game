@@ -40,10 +40,9 @@ function init() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // Увеличиваем интенсивность света, чтобы точно видеть модель
-    playerLight = new THREE.PointLight(0xffffff, 5, 20); 
+    playerLight = new THREE.PointLight(0xffffff, 2.0, 15); 
     scene.add(playerLight);
-    scene.add(new THREE.AmbientLight(0xffffff, 1.0)); // Временный яркий свет для теста
+    scene.add(new THREE.AmbientLight(0xffffff, 0.2));
 
     const loader = new THREE.TextureLoader();
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
@@ -79,8 +78,28 @@ function init() {
     });
     window.addEventListener('mousedown', () => { if (document.pointerLockElement) shoot(); });
 
-    spawn3DMonster(5, 5);
+    // ПРАВКА №32: Спавним орду из 15 монстров
+    spawnWave(15);
+    
     animate();
+}
+
+function spawnWave(count) {
+    let spawned = 0;
+    const maxAttempts = 100;
+    let attempts = 0;
+
+    while (spawned < count && attempts < maxAttempts) {
+        let rx = Math.floor(Math.random() * levelData.map[0].length);
+        let rz = Math.floor(Math.random() * levelData.map.length);
+
+        // Проверяем, что в этой клетке нет стены и она далеко от игрока
+        if (levelData.map[rz][rx] === 0 && Math.abs(rx - camera.position.x) > 5) {
+            spawn3DMonster(rx, rz);
+            spawned++;
+        }
+        attempts++;
+    }
 }
 
 function spawn3DMonster(x, z) {
@@ -90,27 +109,32 @@ function spawn3DMonster(x, z) {
     gltfLoader.load(modelPath, (gltf) => {
         const model = gltf.scene;
         
-        // ПРАВКА №29: Авто-выравнивание и гигантский масштаб для поиска
+        // Масштабирование (Правка №29 сохранена)
         const box = new THREE.Box3().setFromObject(model);
         const size = box.getSize(new THREE.Vector3());
-        const scaleFactor = 2 / Math.max(size.x, size.y, size.z);
-        
+        const scaleFactor = 1.8 / size.y; 
         model.scale.set(scaleFactor, scaleFactor, scaleFactor);
-        model.position.set(x, 0.1, z); // Чуть выше пола
+        model.position.set(x, 0, z);
         
         scene.add(model);
 
+        // ПРАВКА №30: Анимация
+        let mixer = null;
         if (gltf.animations.length > 0) {
-            const mixer = new THREE.AnimationMixer(model);
-            mixer.clipAction(gltf.animations[0]).play();
+            mixer = new THREE.AnimationMixer(model);
+            // Пытаемся найти анимацию ходьбы или бега, иначе берем первую
+            const walkClip = THREE.AnimationClip.findByName(gltf.animations, 'walk') || gltf.animations[0];
+            mixer.clipAction(walkClip).play();
             mixers.push(mixer);
         }
 
-        model.userData = { health: 60, speed: 0.02 };
+        // ПРАВКА №31: Здоровье на 15 попаданий (100 / 7 ≈ 14.2)
+        model.userData = { 
+            health: 100, 
+            speed: 0.02 + Math.random() * 0.01, 
+            mixer: mixer 
+        };
         monsters.push(model);
-        console.log("Монстр визуализирован!");
-    }, undefined, (err) => {
-        console.error("Ошибка загрузки модели!");
     });
 }
 
@@ -134,7 +158,8 @@ function shoot() {
         while(target.parent && !target.userData.health) { target = target.parent; }
         
         if (target.userData.health) {
-            target.userData.health -= 30;
+            // ПРАВКА №31: Урон игрока
+            target.userData.health -= 7; 
             if (target.userData.health <= 0) {
                 scene.remove(target);
                 monsters = monsters.filter(m => m !== target);
@@ -151,6 +176,7 @@ function shoot() {
     }, 100);
 }
 
+// ... функции reloadPistol, setupBackgroundMusic, loadSFX и startGame остаются без изменений ...
 function reloadPistol() {
     if (isReloading || pistolMag === 10 || pistolTotal <= 0) return;
     isReloading = true;
@@ -241,13 +267,33 @@ function animate() {
 
     playerLight.position.copy(camera.position);
 
+    const now = Date.now();
     monsters.forEach(m => {
         const dist = m.position.distanceTo(camera.position);
-        if (dist < 15) {
+        if (dist < 12) {
             const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
-            m.position.x += dirM.x * 0.02;
-            m.position.z += dirM.z * 0.02;
-            m.lookAt(camera.position.x, m.position.y, camera.position.z);
+            
+            // ПРАВКА №33: Движение монстра с учетом стен
+            const nextX = m.position.x + dirM.x * m.userData.speed;
+            const nextZ = m.position.z + dirM.z * m.userData.speed;
+            
+            if (physics && !physics.checkCollision(nextX, nextZ)) {
+                m.position.x = nextX;
+                m.position.z = nextZ;
+            }
+            
+            m.lookAt(camera.position.x, 0, camera.position.z);
+
+            // ПРАВКА №31: Урон игроку при контакте
+            if (dist < 1.3 && now - lastDamageTime > 1000) {
+                playerHP -= 15;
+                document.getElementById('hp-bar-fill').style.width = playerHP + "%";
+                document.getElementById('hp-text').innerText = playerHP + "%";
+                lastDamageTime = now;
+                document.getElementById('damage-flash').style.display = 'block';
+                setTimeout(() => { document.getElementById('damage-flash').style.display = 'none'; }, 100);
+                if (playerHP <= 0) location.reload();
+            }
         }
     });
 
