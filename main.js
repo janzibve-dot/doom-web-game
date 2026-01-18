@@ -3,13 +3,9 @@ import { Physics } from './engine/physics.js';
 
 let scene, camera, renderer, physics, playerLight;
 let levelData;
-
-let playerHP = 100;
-let pistolMag = 10, pistolTotal = 120;
-let isReloading = false, isShooting = false;
-let lastDamageTime = 0;
+let playerHP = 100, pistolMag = 10, pistolTotal = 120;
+let isReloading = false, isShooting = false, lastDamageTime = 0;
 let monsters = [];
-
 const keys = { KeyW: false, KeyA: false, KeyS: false, KeyD: false, ShiftLeft: false, KeyR: false };
 let pitch = 0;
 
@@ -17,63 +13,63 @@ let shotSound, reloadSound, bgMusic;
 const audioLoader = new THREE.AudioLoader();
 const listener = new THREE.AudioListener();
 
-// ГАРАНТИРОВАННЫЙ ПУТЬ ДЛЯ GITHUB PAGES
+// Определение пути
 const path = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';
 
 fetch(path + 'levels/level1.json')
     .then(r => r.json())
-    .then(data => { levelData = data; init(); })
-    .catch(err => console.error("Ошибка загрузки уровня. Проверь файл levels/level1.json"));
+    .then(data => { 
+        levelData = data; 
+        physics = new Physics(levelData); // Инициализация физики сразу после загрузки
+        init(); 
+    });
 
 function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x020000);
     scene.fog = new THREE.Fog(0x020000, 1, 30);
 
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 1000);
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(2, 1.6, 2);
     camera.rotation.order = 'YXZ'; 
     camera.add(listener);
 
-    // Загрузка звуков с учетом пути репозитория
+    // Загрузка аудио
     bgMusic = new THREE.Audio(listener);
     audioLoader.load(path + 'audio/music/fon.mp3', (buffer) => {
         bgMusic.setBuffer(buffer);
         bgMusic.setLoop(true);
-        bgMusic.setVolume(0.15);
-    }, undefined, (err) => console.log("Файл fon.mp3 не найден по адресу: " + path + "audio/music/fon.mp3"));
+        bgMusic.setVolume(0.2);
+    });
 
     shotSound = new THREE.Audio(listener);
     audioLoader.load(path + 'audio/sfx/shot.mp3', (buffer) => {
         shotSound.setBuffer(buffer);
-        shotSound.setVolume(0.8);
+        shotSound.setVolume(0.9);
     });
 
     reloadSound = new THREE.Audio(listener);
     audioLoader.load(path + 'audio/sfx/reload.mp3', (buffer) => {
         reloadSound.setBuffer(buffer);
-        reloadSound.setVolume(0.6);
+        reloadSound.setVolume(0.7);
     });
 
     renderer = new THREE.WebGLRenderer({ antialias: false });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    physics = new Physics(levelData);
     const loader = new THREE.TextureLoader();
-
     scene.add(new THREE.AmbientLight(0x220000, 0.5));
-    playerLight = new THREE.PointLight(0xffffff, 1.2, 15);
+    playerLight = new THREE.PointLight(0xffffff, 1.5, 15);
     scene.add(playerLight);
 
+    // Отрисовка стен
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
-    const wallGeo = new THREE.BoxGeometry(1.05, 4, 1.05);
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
-
     levelData.map.forEach((row, z) => {
         row.forEach((cell, x) => {
             if (cell === 1) {
-                const wall = new THREE.Mesh(wallGeo, wallMat);
+                const wall = new THREE.Mesh(new THREE.BoxGeometry(1, 4, 1), wallMat);
                 wall.position.set(x, 2, z);
                 scene.add(wall);
             }
@@ -84,23 +80,17 @@ function init() {
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
 
-    // События
-    window.addEventListener('keydown', e => { 
-        if(e.code in keys) keys[e.code] = true; 
-        if(e.code === 'KeyR') reloadPistol();
-    });
-    window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
-    
-    window.addEventListener('mousedown', () => {
+    // Старт игры по клику на экран
+    document.getElementById('start-screen').addEventListener('click', () => {
+        document.getElementById('start-screen').style.display = 'none';
+        document.body.requestPointerLock();
         if (listener.context.state === 'suspended') listener.context.resume();
-        if (document.pointerLockElement) {
-            shoot();
-        } else {
-            document.body.requestPointerLock();
-            if (bgMusic.buffer && !bgMusic.isPlaying) bgMusic.play();
-        }
+        if (bgMusic.buffer && !bgMusic.isPlaying) bgMusic.play();
     });
 
+    window.addEventListener('keydown', e => { if(e.code in keys) keys[e.code] = true; if(e.code === 'KeyR') reloadPistol(); });
+    window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
+    window.addEventListener('mousedown', () => { if (document.pointerLockElement) shoot(); });
     window.addEventListener('mousemove', e => {
         if (document.pointerLockElement) {
             camera.rotation.y -= e.movementX * 0.002;
@@ -111,10 +101,8 @@ function init() {
         }
     });
 
-    // Создаем монстров
     spawnMonster(5, 5);
     spawnMonster(2, 8);
-
     animate();
 }
 
@@ -128,14 +116,12 @@ function spawnMonster(x, z) {
         monster.userData = { health: 50, speed: 0.015 };
         scene.add(monster);
         monsters.push(monster);
-    }, undefined, (err) => console.log("Монстр не найден по адресу: " + path + "assets/sprites/monster.png"));
+    });
 }
 
 function updateWeaponPosition() {
     const weapon = document.getElementById('weapon');
-    if (!isReloading) {
-        weapon.style.transform = `translateY(${pitch * 20}px)`;
-    }
+    if (!isReloading) weapon.style.transform = `translateY(${pitch * 25}px)`;
 }
 
 function reloadPistol() {
@@ -161,10 +147,10 @@ function shoot() {
     document.getElementById('mag').innerText = pistolMag;
     if (shotSound.buffer) { if (shotSound.isPlaying) shotSound.stop(); shotSound.play(); }
 
+    // Урон монстрам
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
     const intersects = raycaster.intersectObjects(monsters);
-
     if (intersects.length > 0) {
         let m = intersects[0].object;
         m.userData.health -= 25;
@@ -174,47 +160,17 @@ function shoot() {
         }
     }
 
+    // РЕЗКАЯ АНИМАЦИЯ ВЫСТРЕЛА
     const weapon = document.getElementById('weapon');
-    weapon.style.transform = `translateY(${pitch * 20 + 70}px) scale(1.1) rotate(-5deg)`;
+    weapon.style.transition = "none";
+    weapon.style.transform = `translateY(${pitch * 25 + 80}px) scale(1.15) rotate(-5deg)`;
+    
     setTimeout(() => {
         weapon.style.transition = "transform 0.1s ease-out";
         updateWeaponPosition();
         isShooting = false;
         if (pistolMag === 0) reloadPistol();
-    }, 80);
-}
-
-function updateMonsters() {
-    const now = Date.now();
-    monsters.forEach(m => {
-        const dist = m.position.distanceTo(camera.position);
-        const dirToPlayer = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
-        if (dist < 15) {
-            const nextX = m.position.x + dirToPlayer.x * m.userData.speed;
-            const nextZ = m.position.z + dirToPlayer.z * m.userData.speed;
-            if (!physics.checkCollision(nextX, nextZ)) {
-                m.position.x = nextX; m.position.z = nextZ;
-            }
-            if (dist < 1.2 && now - lastDamageTime > 1000) {
-                takeDamage(20);
-                lastDamageTime = now;
-            }
-        }
-    });
-}
-
-function takeDamage(amount) {
-    playerHP -= amount;
-    if (playerHP < 0) playerHP = 0;
-    document.getElementById('hp-bar-fill').style.width = playerHP + "%";
-    document.getElementById('hp-text').innerText = Math.ceil(playerHP) + "%";
-    const flash = document.getElementById('damage-flash');
-    flash.style.display = 'block';
-    setTimeout(() => flash.style.display = 'none', 100);
-    if (playerHP <= 0) {
-        alert("ВЫ ПОГИБЛИ");
-        location.reload();
-    }
+    }, 70);
 }
 
 function animate() {
@@ -231,9 +187,32 @@ function animate() {
     if (keys.KeyA) camera.position.addScaledVector(side, s);
     if (keys.KeyD) camera.position.addScaledVector(side, -s);
 
-    if (physics.checkCollision(camera.position.x, camera.position.z)) camera.position.copy(oldP);
+    // ФИЗИКА СТЕН (проверка)
+    if (physics && physics.checkCollision(camera.position.x, camera.position.z)) {
+        camera.position.copy(oldP);
+    }
 
-    updateMonsters();
+    // ИИ Монстров
+    const now = Date.now();
+    monsters.forEach(m => {
+        const dist = m.position.distanceTo(camera.position);
+        if (dist < 15) {
+            const dirToP = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
+            const nextX = m.position.x + dirToP.x * m.userData.speed;
+            const nextZ = m.position.z + dirToP.z * m.userData.speed;
+            if (physics && !physics.checkCollision(nextX, nextZ)) {
+                m.position.x = nextX; m.position.z = nextZ;
+            }
+            if (dist < 1.2 && now - lastDamageTime > 1000) {
+                playerHP -= 20;
+                document.getElementById('hp-bar-fill').style.width = playerHP + "%";
+                document.getElementById('hp-text').innerText = playerHP + "%";
+                lastDamageTime = now;
+                if (playerHP <= 0) location.reload();
+            }
+        }
+    });
+
     playerLight.position.copy(camera.position);
     renderer.render(scene, camera);
 }
