@@ -15,32 +15,30 @@ const listener = new THREE.AudioListener();
 const path = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
 
 window.addEventListener('DOMContentLoaded', () => {
-    fetch(path + 'levels/level1.json')
-        .then(r => r.json())
-        .then(data => { 
-            levelData = data; 
-            physics = new Physics(levelData);
-            init(); 
-        });
+    fetch(path + 'levels/level1.json').then(r => r.json()).then(data => { 
+        levelData = data; 
+        physics = new Physics(levelData);
+        init(); 
+    });
 });
 
 function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000); 
-    scene.fog = new THREE.Fog(0x000000, 1, 10); 
+    scene.fog = new THREE.Fog(0x000000, 1, 9); 
 
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 500);
     camera.position.set(2, 1.6, 2);
     camera.rotation.order = 'YXZ'; 
     camera.add(listener);
 
-    renderer = new THREE.WebGLRenderer({ antialias: false });
+    renderer = new THREE.WebGLRenderer({ antialias: false, precision: "highp" });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
     loadAllSounds();
 
-    playerLight = new THREE.SpotLight(0xffffff, 5, 18, Math.PI/4, 0.5);
+    playerLight = new THREE.SpotLight(0xffffff, 6, 16, Math.PI/4, 0.4);
     scene.add(playerLight);
     scene.add(playerLight.target);
 
@@ -48,37 +46,41 @@ function init() {
     const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
     wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping;
     const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
-    const ceilMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x050505 });
+    const ceilMat = new THREE.MeshStandardMaterial({ color: 0x080808 });
 
+    // ГЕНЕРАЦИЯ МИРА: Плиточная система (БЕЗ БАГОВ)
     levelData.map.forEach((row, z) => {
         row.forEach((cell, x) => {
             if (cell === 1) {
                 const wall = new THREE.Mesh(new THREE.BoxGeometry(1, 4, 1), wallMat);
                 wall.position.set(x, 2, z);
                 scene.add(wall);
+            } else {
+                // Пол плиткой
+                const floorTile = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.1, 1.02), floorMat);
+                floorTile.position.set(x, 0, z);
+                scene.add(floorTile);
+                // Потолок плиткой (ровно на высоте 4)
+                const ceilTile = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.1, 1.02), ceilMat);
+                ceilTile.position.set(x, 4, z);
+                scene.add(ceilTile);
             }
-            const ceilPart = new THREE.Mesh(new THREE.BoxGeometry(1, 0.1, 1), ceilMat);
-            ceilPart.position.set(x, 4, z);
-            scene.add(ceilPart);
         });
     });
 
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0x050505 }));
-    floor.rotation.x = -Math.PI / 2;
-    scene.add(floor);
-
-    const startBtn = document.getElementById('play-btn');
-    if(startBtn) startBtn.onclick = () => { if(!isGameStarted) startGame(); };
+    document.getElementById('play-btn').onclick = () => { if(!isGameStarted) startGame(); };
 
     window.onkeydown = (e) => { if(isGameStarted && !isDead && e.code in keys) keys[e.code] = true; };
     window.onkeyup = (e) => { if(isGameStarted && !isDead && e.code in keys) keys[e.code] = false; };
     window.onmousemove = (e) => {
         if (isGameStarted && document.pointerLockElement && !isDead) {
-            camera.rotation.y -= e.movementX * 0.002;
-            pitch -= e.movementY * 0.002;
-            pitch = Math.max(-1.4, Math.min(1.4, pitch));
+            camera.rotation.y -= e.movementX * 0.0022;
+            pitch -= e.movementY * 0.0022;
+            pitch = Math.max(-1.3, Math.min(1.3, pitch));
             camera.rotation.x = pitch;
-            document.getElementById('weapon').style.transform = `translateY(${pitch * 20}px)`;
+            // Центрируем оружие по взгляду
+            document.getElementById('weapon').style.transform = `translateY(${pitch * 25}px)`;
         }
     };
     window.onmousedown = () => { if (isGameStarted && !isDead) shoot(); };
@@ -108,7 +110,6 @@ function spawnRandomMonster() {
     gltfLoader.load(path + 'assets/sprites/models/monster.glb', (gltf) => {
         const model = gltf.scene;
         model.position.set(rx, 0, rz);
-        // ПРАВКА РАЗМЕРА: увеличен до 1.8
         model.scale.set(1.8, 1.8, 1.8);
         scene.add(model);
         if (gltf.animations.length > 0) {
@@ -121,7 +122,7 @@ function spawnRandomMonster() {
             mixers.push(mixer);
         }
         model.userData.health = 100;
-        model.userData.speed = 0.045;
+        model.userData.speed = 0.046;
         monsters.push(model);
     });
 }
@@ -141,7 +142,7 @@ function animate() {
     });
 
     const oldP = camera.position.clone();
-    let s = keys.ShiftLeft ? 0.15 : 0.07;
+    let s = keys.ShiftLeft ? 0.16 : 0.08;
     const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
     const moveDir = dir.clone().setY(0).normalize();
     const sideDir = new THREE.Vector3().crossVectors(camera.up, moveDir).normalize();
@@ -153,8 +154,7 @@ function animate() {
 
     let collision = false;
     if (physics && physics.checkCollision(camera.position.x, camera.position.z)) collision = true;
-    // ПРАВКА ФИЗИКИ: дистанция коллизии с монстром увеличена до 1.2
-    monsters.forEach(m => { if(camera.position.distanceTo(m.position) < 1.2) collision = true; });
+    monsters.forEach(m => { if(camera.position.distanceTo(m.position) < 1.25) collision = true; });
     if (collision) camera.position.copy(oldP);
 
     playerLight.position.copy(camera.position);
@@ -167,13 +167,13 @@ function animate() {
     monsters.forEach(m => {
         const dist = m.position.distanceTo(camera.position);
         if (dist < minMonsterDist) minMonsterDist = dist;
-        if (dist < 12) { 
+        if (dist < 13) { 
             const dirM = new THREE.Vector3().subVectors(camera.position, m.position).normalize();
             if (physics && !physics.checkCollision(m.position.x + dirM.x*0.4, m.position.z + dirM.z*0.4)) {
                 m.position.x += dirM.x * m.userData.speed; m.position.z += dirM.z * m.userData.speed;
             }
             m.lookAt(camera.position.x, 0, camera.position.z);
-            if (dist < 1.4 && now - lastDamageTime > 1200) {
+            if (dist < 1.45 && now - lastDamageTime > 1200) {
                 playerHP -= 20;
                 document.getElementById('hp-bar-fill').style.width = playerHP + "%";
                 document.getElementById('hp-text').innerText = playerHP + "%";
@@ -185,11 +185,11 @@ function animate() {
         }
     });
 
-    if (minMonsterDist < 7) {
-        let intensity = 1 - (minMonsterDist / 7);
+    if (minMonsterDist < 7.5) {
+        let intensity = 1 - (minMonsterDist / 7.5);
         if (heartbeatSound) heartbeatSound.setVolume(intensity);
         if (flickerSound) flickerSound.setVolume(intensity * 0.5);
-        if (Math.random() > (minMonsterDist / 7)) playerLight.intensity = Math.random() * 0.3;
+        if (Math.random() > (minMonsterDist / 7.5)) playerLight.intensity = Math.random() * 0.2;
         else playerLight.intensity = 5;
     } else {
         if (heartbeatSound) heartbeatSound.setVolume(0);
@@ -207,11 +207,11 @@ function shoot() {
 
     const weapon = document.getElementById('weapon');
     weapon.style.transition = 'none';
-    weapon.style.transform = `translateY(${pitch * 20 - 45}px) scale(1.1)`;
+    weapon.style.transform = `translateY(${pitch * 25 - 45}px) scale(1.1)`;
 
     setTimeout(() => {
         weapon.style.transition = 'transform 0.1s ease-out';
-        weapon.style.transform = `translateY(${pitch * 20}px)`;
+        weapon.style.transform = `translateY(${pitch * 25}px)`;
         isShooting = false;
         if (pistolMag === 0) reloadPistol();
     }, 100);
