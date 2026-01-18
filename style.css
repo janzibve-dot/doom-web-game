@@ -1,33 +1,45 @@
-body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', Courier, monospace; }
-
-#damage-flash {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(255, 0, 0, 0.4); display: none; pointer-events: none; z-index: 100;
+body { 
+    margin: 0; 
+    overflow: hidden; 
+    background-color: #000; 
+    font-family: 'Courier New', Courier, monospace; 
 }
 
 #hud {
     position: absolute; bottom: 0; width: 100%; height: 60px;
-    background: #111; border-top: 4px solid #333;
+    background: #111; border-top: 4px solid #444;
     display: flex; justify-content: space-around; align-items: center;
-    color: #f00; font-size: 24px; font-weight: bold; z-index: 50;
+    color: #ff0000; font-size: 24px; font-weight: bold; z-index: 100;
 }
 
 .label { font-size: 12px; color: #666; display: block; }
 
-#crosshair {
-    position: absolute; top: 50%; left: 50%; width: 10px; height: 10px;
-    border: 2px solid #0f0; border-radius: 50%; transform: translate(-50%, -50%);
-    pointer-events: none; z-index: 40;
-}
-
 #weapon-container {
     position: absolute; bottom: 60px; left: 0; width: 100%; height: 100%;
     display: flex; justify-content: center; align-items: flex-end;
-    pointer-events: none; z-index: 30;
+    pointer-events: none; z-index: 10;
 }
 
 #weapon {
-    width: 400px; height: 400px;
-    background-image: url('https://raw.githubusercontent.com/pajadam/pajadam.github.io/master/doom-assets/shotgun.png');
-    background-size: contain; background-repeat: no-repeat; background-position: bottom center;
+    width: 500px; 
+    height: 500px;
+    /* Указываем путь к твоей загруженной картинке */
+    background-image: url('assets/sprites/pistol.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: bottom center;
+    /* Плавный возврат после отдачи */
+    transition: transform 0.1s ease-out;
+}
+
+#crosshair {
+    position: absolute; top: 50%; left: 50%;
+    width: 10px; height: 10px; border: 2px solid #0f0;
+    border-radius: 50%; transform: translate(-50%, -50%);
+    pointer-events: none; z-index: 50;
+}
+
+#damage-flash {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(255, 0, 0, 0.4); display: none; pointer-events: none; z-index: 150;
 }
