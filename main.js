@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Physics } from './engine/physics.js';
-import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 
 let scene, camera, renderer, physics, playerLight;
 let levelData, playerHP = 100, pistolMag = 10, pistolTotal = 120, kills = 0;
@@ -25,49 +26,78 @@ window.addEventListener('DOMContentLoaded', () => {
 function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000); 
-    scene.fog = new THREE.Fog(0x000000, 1, 9); 
+    scene.fog = new THREE.Fog(0x000000, 0.1, 10); 
 
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 500);
+    // ПРАВКА: Сужение диапазона Near/Far для стабильности глубины
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 300);
     camera.position.set(2, 1.6, 2);
     camera.rotation.order = 'YXZ'; 
     camera.add(listener);
 
-    renderer = new THREE.WebGLRenderer({ antialias: false, precision: "highp" });
+    // ПРАВКА: logarithmicDepthBuffer решает проблему мерцания полос (Z-fighting)
+    renderer = new THREE.WebGLRenderer({ 
+        antialias: true, 
+        logarithmicDepthBuffer: true,
+        precision: "highp" 
+    });
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     document.body.appendChild(renderer.domElement);
 
     loadAllSounds();
 
-    playerLight = new THREE.SpotLight(0xffffff, 6, 16, Math.PI/4, 0.4);
+    playerLight = new THREE.SpotLight(0xffffff, 8, 16, Math.PI/4, 0.4);
     scene.add(playerLight);
     scene.add(playerLight.target);
 
-    const loader = new THREE.TextureLoader();
-    const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
-    wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping;
-    const wallMat = new THREE.MeshStandardMaterial({ map: wallTex });
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x050505 });
-    const ceilMat = new THREE.MeshStandardMaterial({ color: 0x080808 });
+    // ОПТИМИЗАЦИЯ: Объединение геометрии уровня
+    const wallGeometries = [];
+    const floorGeometries = [];
+    const ceilGeometries = [];
 
-    // ГЕНЕРАЦИЯ МИРА: Плиточная система (БЕЗ БАГОВ)
+    const wallBox = new THREE.BoxGeometry(1, 4, 1);
+    const floorBox = new THREE.BoxGeometry(1, 0.1, 1);
+
     levelData.map.forEach((row, z) => {
         row.forEach((cell, x) => {
             if (cell === 1) {
-                const wall = new THREE.Mesh(new THREE.BoxGeometry(1, 4, 1), wallMat);
-                wall.position.set(x, 2, z);
-                scene.add(wall);
+                const g = wallBox.clone();
+                g.translate(x, 2, z);
+                wallGeometries.push(g);
             } else {
-                // Пол плиткой
-                const floorTile = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.1, 1.02), floorMat);
-                floorTile.position.set(x, 0, z);
-                scene.add(floorTile);
-                // Потолок плиткой (ровно на высоте 4)
-                const ceilTile = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.1, 1.02), ceilMat);
-                ceilTile.position.set(x, 4, z);
-                scene.add(ceilTile);
+                const f = floorBox.clone();
+                f.translate(x, 0, z);
+                floorGeometries.push(f);
+
+                const c = floorBox.clone();
+                c.translate(x, 4, z);
+                ceilGeometries.push(c);
             }
         });
     });
+
+    // Создаем единые меши для всего лабиринта
+    const loader = new THREE.TextureLoader();
+    const wallTex = loader.load('https://threejs.org/examples/textures/brick_diffuse.jpg');
+    wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping;
+    
+    const wallMesh = new THREE.Mesh(
+        BufferGeometryUtils.mergeGeometries(wallGeometries),
+        new THREE.MeshStandardMaterial({ map: wallTex })
+    );
+    scene.add(wallMesh);
+
+    const floorMesh = new THREE.Mesh(
+        BufferGeometryUtils.mergeGeometries(floorGeometries),
+        new THREE.MeshStandardMaterial({ color: 0x050505 })
+    );
+    scene.add(floorMesh);
+
+    const ceilMesh = new THREE.Mesh(
+        BufferGeometryUtils.mergeGeometries(ceilGeometries),
+        new THREE.MeshStandardMaterial({ color: 0x080808 })
+    );
+    scene.add(ceilMesh);
 
     document.getElementById('play-btn').onclick = () => { if(!isGameStarted) startGame(); };
 
@@ -79,7 +109,6 @@ function init() {
             pitch -= e.movementY * 0.0022;
             pitch = Math.max(-1.3, Math.min(1.3, pitch));
             camera.rotation.x = pitch;
-            // Центрируем оружие по взгляду
             document.getElementById('weapon').style.transform = `translateY(${pitch * 25}px)`;
         }
     };
@@ -95,7 +124,7 @@ function startGame() {
     document.getElementById('start-screen').style.display = 'none';
     document.body.requestPointerLock();
     if (listener.context.state === 'suspended') listener.context.resume();
-    if (bgMusicHTML) bgMusicHTML.play().catch(() => {});
+    if (bgMusicHTML) bgMusicHTML.play();
     setInterval(() => { if (monsters.length < 15 && !isDead) spawnRandomMonster(); }, 5000);
 }
 
@@ -115,10 +144,13 @@ function spawnRandomMonster() {
         if (gltf.animations.length > 0) {
             const mixer = new THREE.AnimationMixer(model);
             const action = mixer.clipAction(gltf.animations[0]);
-            const startTrim = 3, endTrim = Math.max(3.1, gltf.animations[0].duration - 3);
+            const duration = gltf.animations[0].duration;
+            const startTrim = 3;
+            const endTrim = Math.max(startTrim + 0.1, duration - 3);
+            
             action.time = startTrim;
             action.play();
-            model.userData.animData = { action, startTrim, endTrim };
+            model.userData.anim = { action, startTrim, endTrim };
             mixers.push(mixer);
         }
         model.userData.health = 100;
@@ -132,12 +164,12 @@ function animate() {
     if (!isGameStarted || isDead) return;
 
     const delta = clock.getDelta();
-    mixers.forEach((m, idx) => {
+    mixers.forEach((m) => {
         m.update(delta);
-        const monster = monsters.find(mon => mon.userData.animData && mixers.includes(m));
-        if (monster) {
-            const d = monster.userData.animData;
-            if (d.action.time >= d.endTrim) d.action.time = d.startTrim;
+        // Обрезка анимации в реальном времени
+        const action = m._actions[0];
+        if (action && action.time >= action._clip.duration - 3) {
+            action.time = 3;
         }
     });
 
@@ -164,7 +196,7 @@ function animate() {
     let minMonsterDist = 20;
     const now = Date.now();
 
-    monsters.forEach(m => {
+    monsters.forEach((m, idx) => {
         const dist = m.position.distanceTo(camera.position);
         if (dist < minMonsterDist) minMonsterDist = dist;
         if (dist < 13) { 
@@ -190,11 +222,11 @@ function animate() {
         if (heartbeatSound) heartbeatSound.setVolume(intensity);
         if (flickerSound) flickerSound.setVolume(intensity * 0.5);
         if (Math.random() > (minMonsterDist / 7.5)) playerLight.intensity = Math.random() * 0.2;
-        else playerLight.intensity = 5;
+        else playerLight.intensity = 6;
     } else {
         if (heartbeatSound) heartbeatSound.setVolume(0);
         if (flickerSound) flickerSound.setVolume(0);
-        playerLight.intensity = 5;
+        playerLight.intensity = 6;
     }
     renderer.render(scene, camera);
 }
@@ -226,6 +258,7 @@ function shoot() {
             obj.userData.health -= 35;
             if (obj.userData.health <= 0) {
                 scene.remove(obj);
+                // ПРАВКА: Полная очистка памяти при убийстве
                 monsters = monsters.filter(m => m !== obj);
                 kills++; document.getElementById('kill-counter').innerText = "УБИТО: " + kills;
             }
